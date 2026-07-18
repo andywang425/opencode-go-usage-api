@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import httpx
+import httpx2
 
 from opencode_go_usage_api.config import AccountConfig, FetchConfig
 from opencode_go_usage_api.fetcher import fetch_html
@@ -10,8 +10,9 @@ def test_fetches_each_account_with_its_own_url_and_cookie(monkeypatch) -> None:
     requests: list[tuple[str, dict[str, str]]] = []
 
     class FakeClient:
-        def __init__(self, **kwargs) -> None:
-            pass
+        def __init__(self, *, cookies, headers, **kwargs) -> None:
+            self.cookies = cookies
+            assert headers == {"User-Agent": "test-agent", "Accept": "text/html"}
 
         def __enter__(self):
             return self
@@ -19,12 +20,12 @@ def test_fetches_each_account_with_its_own_url_and_cookie(monkeypatch) -> None:
         def __exit__(self, exc_type, exc_value, traceback) -> None:
             pass
 
-        def get(self, url, *, cookies, headers):
-            requests.append((url, cookies))
-            request = httpx.Request("GET", url)
-            return httpx.Response(200, text="usage page", request=request)
+        def get(self, url):
+            requests.append((url, self.cookies))
+            request = httpx2.Request("GET", url)
+            return httpx2.Response(200, text="usage page", request=request)
 
-    monkeypatch.setattr("opencode_go_usage_api.fetcher.httpx.Client", FakeClient)
+    monkeypatch.setattr("opencode_go_usage_api.fetcher.httpx2.Client", FakeClient)
     settings = FetchConfig(10, 1, "zh", "test-agent")
     main = AccountConfig("Main", "main-cookie", "wrk_main")
     backup = AccountConfig("backup", "backup-cookie", "wrk_backup")

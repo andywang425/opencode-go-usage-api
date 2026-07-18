@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import httpx
+import httpx2
 
 from .config import AccountConfig, FetchConfig
 
@@ -18,9 +18,9 @@ class AuthExpiredError(FetchError):
 _LOGIN_PAGE_MARKER = "<title>OpenAuth</title>"
 
 
-def _is_login_page(resp: httpx.Response) -> bool:
+def _is_login_page(resp: httpx2.Response) -> bool:
     """判断响应是否落在登录或选择登录方式页面。"""
-    final = httpx.URL(resp.url)
+    final = httpx2.URL(resp.url)
     if final.host == "auth.opencode.ai":
         return True
     if final.host == "opencode.ai" and final.path.startswith("/auth"):
@@ -36,10 +36,13 @@ def fetch_html(account: AccountConfig, settings: FetchConfig) -> str:
     last_exc: Exception | None = None
     for _attempt in range(settings.retries + 1):
         try:
-            with httpx.Client(
-                timeout=settings.timeout, follow_redirects=True
+            with httpx2.Client(
+                timeout=settings.timeout,
+                follow_redirects=True,
+                cookies=cookies,
+                headers=headers,
             ) as client:
-                resp = client.get(account.workspace_url, cookies=cookies, headers=headers)
+                resp = client.get(account.workspace_url)
             if _is_login_page(resp):
                 raise AuthExpiredError("被重定向到登录页，登录凭证可能已失效")
             if resp.status_code != 200:
