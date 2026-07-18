@@ -1,12 +1,15 @@
 # OpenCode Go 用量 API
 
-被访问时实时抓取一次 OpenCode Go 工作区页面，解析用量数据，返回 JSON。
+被访问时实时抓取指定 OpenCode Go 工作区页面，解析用量数据并返回 JSON。支持在一个服务中配置多个 OpenCode Go 账号，供 [CC Switch](https://ccswitch.io/) 分别查询。
 
-我个人用于接入[CC Switch](https://ccswitch.io/)，方便随时查看剩余用量和重置时间。当 CC Switch 官方支持 OpenCode GO 的用量查询时，本项目将停止维护。
+## API
 
-## 响应格式
+### 查询用量
 
-`GET /usage`（需鉴权）返回：
+- `GET /usage`：查询 `config.toml` 中指定的默认账号。
+- `GET /usage/{account_id}`：查询指定账号，例如 `/usage/backup`。
+
+两个接口都需要请求头 `Authorization: Bearer <API_TOKEN>`，成功响应格式一致：
 
 ```json
 {
@@ -16,153 +19,174 @@
 }
 ```
 
-- **success**：解析出至少一组用量则 `true`；抓取失败或一项都没解析出则 `false`。
-- **reason**：`success` 为 `false` 时说明原因（如“抓取失败：登录凭证可能已失效”）。
-- **data**：滚动/每周/每月用量的已用百分比 + 距下次重置的倒计时。**格式可通过 `.env` 的 `DATA_TEMPLATE` 自定义**，详见下方可选配置。
+- `success`：解析出至少一组用量时为 `true`。
+- `reason`：抓取或解析失败时说明原因。
+- `data`：用量与重置倒计时，可通过配置模板自定义。
 
-另有 `GET /health`（免鉴权）返回 `{"status":"ok"}`，用于存活检查。
+已知账号的凭据失效、抓取失败和解析失败仍返回 HTTP 200，并通过 `success:false` 表示，便于 CC Switch 提取错误信息。未知账号返回 HTTP 404，鉴权失败返回 HTTP 401。
 
-## 技术方案
+### 健康检查
 
-- **Python + uv**，FastAPI + uvicorn。
-- 用 **httpx** 带 `auth`、`oc_locale` 两个 Cookie 发一次 GET，解析首屏 HTML 里内联的用量 JSON（精确到秒），DOM 文本兜底。
-- **HTTPS**：uvicorn 直接加载 TLS 证书，监听端口由 `.env` 的 `PORT` 控制。
-- **鉴权**：请求头 `Authorization: Bearer <API_TOKEN>`。
+`GET /health` 免鉴权，返回 `{"status":"ok"}`。该接口只检查服务存活，不抓取账号页面。
 
----
+## 配置
 
-## 部署步骤
+服务固定读取当前工作目录下的 `config.toml`。复制示例并限制文件权限：
 
-假设系统是 Ubuntu 24.04，用户 root，有公网IP，项目放在 `/opt/opencode-go-usage-api`。
+```bash
+cp config.example.toml config.toml
+chmod 600 config.toml
+```
 
-### 1. 克隆项目
+完整示例：
+
+```toml
+[server]
+api_token = "使用 openssl rand -hex 32 生成的强随机值"
+host = "0.0.0.0"
+port = 18443
+ssl_certfile = "certs/cert.pem"
+ssl_keyfile = "certs/key.pem"
+
+[fetch]
+timeout = 10
+retries = 1
+locale = "zh"
+user_agent = "Mozilla/5.0 ..."
+
+[response]
+data_template = "滚动 {rolling_percent}% ({rolling_reset}) | 周 {weekly_percent}% ({weekly_reset}) | 月 {monthly_percent}% ({monthly_reset})"
+
+[account]
+default = "main"
+
+[accounts.main]
+auth_cookie = "主账号的 auth cookie 值"
+workspace_id = "wrk_main"
+
+[accounts.backup]
+auth_cookie = "备用账号的 auth cookie 值"
+workspace_id = "wrk_backup"
+```
+
+账号 ID 支持 1–64 位大小写字母、数字、`_`、`-`，首位必须是字母或数字。账号 ID 大小写敏感，因此 `Main` 和 `main` 是不同账号。即使只有一个账号，也必须设置 `[account].default`。
+
+配置会在启动时严格校验。未知字段、空凭据、无效默认账号、不完整的 TLS 配置等都会阻止服务启动。修改配置后需要重启服务。
+
+### 配置项
+
+| 配置 | 默认值 | 说明 |
+| --- | --- | --- |
+| `server.api_token` | 无 | API 访问密钥，必填 |
+| `server.host` | `0.0.0.0` | 监听地址 |
+| `server.port` | `18443` | 监听端口 |
+| `server.ssl_certfile` / `ssl_keyfile` | 空 | 必须同时填写；均为空时使用 HTTP |
+| `fetch.timeout` | `10` | 单次抓取超时秒数 |
+| `fetch.retries` | `1` | 网络异常后的重试次数 |
+| `fetch.locale` | `zh` | OpenCode 的 `oc_locale` cookie |
+| `fetch.user_agent` | 内置浏览器 UA | 上游请求的 User-Agent |
+| `response.data_template` | 内置模板 | 响应 `data` 字段模板 |
+| `account.default` | 无 | 默认账号 ID，必填 |
+| `accounts.<id>.auth_cookie` | 无 | 该账号的原始 `auth` cookie 值 |
+| `accounts.<id>.workspace_id` | 无 | 该账号对应的工作区 ID |
+
+### 自定义 data 格式
+
+模板占位符由分组和字段组成，例如 `{rolling_percent}`：
+
+| 分组 | 含义 | 字段 | 含义 |
+| --- | --- | --- | --- |
+| `rolling` | 滚动用量 | `percent` | 已用百分比数字 |
+| `weekly` | 每周用量 | `reset` | 距重置倒计时 |
+| `monthly` | 每月用量 | `status` | 上游状态文本 |
+
+三种分组都支持 `percent`、`reset` 和 `status`。缺失值显示为 `—`，未知的简单占位符会原样保留；模板语法错误会导致配置校验失败。
+
+```toml
+[response]
+data_template = "R {rolling_percent}% / W {weekly_percent}% / M {monthly_percent}%"
+```
+
+## 本地开发
+
+需要 [uv](https://docs.astral.sh/uv/)。
+
+```bash
+uv sync
+cp config.example.toml config.toml
+# 编辑 config.toml 后启动
+uv run uvicorn opencode_go_usage_api:app --reload
+```
+
+运行测试：
+
+```bash
+uv run pytest
+```
+
+## 部署
+
+以下示例假设 Ubuntu 24.04、项目目录 `/opt/opencode-go-usage-api`。
 
 ```bash
 cd /opt
 git clone https://github.com/andywang425/opencode-go-usage-api.git
-cd /opt/opencode-go-usage-api
+cd opencode-go-usage-api
+uv sync
+cp config.example.toml config.toml
+chmod 600 config.toml
 ```
 
-### 2. 安装依赖
-
-```bash
-uv sync           # 创建 .venv 并按 pyproject.toml 安装依赖
-```
-
-### 3. （可选）生成自签证书
+如需自签证书：
 
 ```bash
 chmod +x gen-cert.sh
-./gen-cert.sh <你的公网IP>          # 例：./gen-cert.sh 203.0.113.45
+./gen-cert.sh <公网IP>
 ```
 
-输出目录默认是脚本同目录下的 `./certs` 目录。生成的 `certs/cert.pem`、`certs/key.pem` 有效期 10 年。
+然后将生成的路径写入 `config.toml`：
 
-### 4. 填写配置
-
-```bash
-cp .env.example .env
-chmod 600 .env                      # 内含等同账户登录态的 cookie，必须锁权限
-nano .env
+```toml
+[server]
+ssl_certfile = "certs/cert.pem"
+ssl_keyfile = "certs/key.pem"
 ```
 
-必填项：
-
-- `AUTH_COOKIE`：你的 OpenCode `auth` cookie（浏览器登录后，开发者工具 → 应用 → Cookie 里复制 `auth` 的值）。
-- `API_TOKEN`：第三方访问用的密钥，生成一个强随机值：`openssl rand -hex 32`。
-- `WORKSPACE_ID`：你的工作区 ID。
-
-可选项：
-
-- `SSL_CERTFILE` / `SSL_KEYFILE`：证书和私钥文件路径。如果不填则无法启用 HTTPS，降级为 HTTP（后续 url 中的 https 改为 http）。
-- `OC_LOCALE`：网页语言，默认 `zh`。
-- `PORT` / `HOST`：监听端口和地址，默认 `18443` / `0.0.0.0`。改端口后，下方涉及端口号的防火墙、验证、接入命令需同步替换为你配置的端口。
-- `DATA_TEMPLATE`：自定义 `data` 字段格式，留空用默认格式。
-
-#### 自定义 data 格式
-
-`data` 字段默认格式为 `滚动 0% (5h) | 周 7% (3d16h) | 月 3% (29d22h)`，可在 `.env` 里用 `DATA_TEMPLATE` 改成任意模板字符串。占位符形如 `{分组_字段}`：
-
-| 分组      | 含义     | 字段      | 含义                       |
-| --------- | -------- | --------- | -------------------------- |
-| `rolling` | 滚动用量 | `percent` | 已用百分比数字（不含 `%`） |
-| `weekly`  | 每周用量 | `reset`   | 距重置倒计时（如 `3d16h`） |
-| `monthly` | 每月用量 | `status`  | 状态文本（如 `ok`）        |
-
-组合示例（分组\_字段）：`{rolling_percent}`、`{weekly_reset}`、`{monthly_status}`。标签文字（“滚动”等）直接写进模板即可。
-
-```
-# 只看百分比、用斜杠分隔
-DATA_TEMPLATE=R {rolling_percent}% / W {weekly_percent}% / M {monthly_percent}%
-```
-
-- 某组用量未解析出、或某字段缺失时，以 `—` 兜底。
-- 未知占位符（拼错的名字）会原样保留成 `{xxx}`，便于发现问题。
-- 模板语法非法（花括号不配对等）时自动回退默认格式，并在启动日志打印一条警告，接口不会因此报错。
-- 留空或不配置该项即使用默认格式。
-
-### 5. 放行防火墙 / 安全组
-
-把下文的 `<PORT>` 换成你在 `.env` 里配置的 `PORT`（默认 18443）。
-
-```bash
-# 本机 ufw（若启用）
-ufw allow <PORT>/tcp
-```
-
-**另外别忘了在云服务商控制台的安全组放行对应 TCP 端口**，否则外网连不上。
-
-### 6. 安装 systemd 服务
+安装 systemd 服务：
 
 ```bash
 chmod +x run.sh
 cp opencode-go-usage-api.service /etc/systemd/system/
-# 编辑服务文件，把路径/用户改成你的
-# vim /etc/systemd/system/opencode-go-usage-api.service
 systemctl daemon-reload
 systemctl enable --now opencode-go-usage-api
-systemctl status opencode-go-usage-api          # 确认 active (running)
+systemctl status opencode-go-usage-api
 ```
 
-看日志：
+修改配置后执行：
 
 ```bash
-journalctl -u opencode-go-usage-api -f
+systemctl restart opencode-go-usage-api
 ```
 
-### 7. 验证
-
-下文 `<PORT>` 即你在 `.env` 配置的 `PORT`（默认 18443）。
-
-在服务器本机（`-k` 跳过自签证书校验，如果没配置证书或配置了可信证书不用加）：
+验证服务，使用自签证书时保留 `-k`：
 
 ```bash
-# 存活检查
-curl -k https://127.0.0.1:<PORT>/health
-
-# 用量（带 token）
-curl -k -H "Authorization: Bearer <你的API_TOKEN>" https://127.0.0.1:<PORT>/usage
+curl -k https://127.0.0.1:18443/health
+curl -k -H "Authorization: Bearer <API_TOKEN>" https://127.0.0.1:18443/usage
+curl -k -H "Authorization: Bearer <API_TOKEN>" https://127.0.0.1:18443/usage/backup
 ```
-
-从外部（用公网 IP）：
-
-```bash
-curl -k -H "Authorization: Bearer <你的API_TOKEN>" https://<你的公网IP>:<PORT>/usage
-```
-
-预期返回形如 `{"success":true,...,"data":"滚动 …% (…) | 周 …% (…) | 月 …% (…)"}` 的 JSON。
 
 ## CC Switch 接入
 
-配置用量查询 → 自定义预设模板，填入以下内容：
+点击配置用量查询图标，预设模板选择自定义，填入以下提取器代码：
 
 ```js
 ({
   request: {
-    url: "https://<你的公网IP>:<PORT>/usage",
+    url: "https://<公网IP>:<PORT>/usage/<ACCOUNT_ID>",
     method: "GET",
     headers: {
-      Authorization: "Authorization: Bearer <你的API_TOKEN>",
+      Authorization: "Bearer <API_TOKEN>",
     },
   },
   extractor: function (response) {
@@ -175,36 +199,22 @@ curl -k -H "Authorization: Bearer <你的API_TOKEN>" https://<你的公网IP>:<P
 });
 ```
 
-如果配置了自签证书，需要把证书导入到操作系统的信任证书库。
+默认账号也可以继续使用 `/usage`。如果使用自签证书，需要将证书导入运行 CC Switch 的操作系统信任库。
 
-### Windows 安装证书的方法
+## Cookie 失效
 
-先把刚刚生成的 `certs/cert.pem` 下载到本地：
+当接口返回以下结果时，重新登录对应 OpenCode 账号并更新其 `auth_cookie`，然后重启服务：
 
-```bash
-scp root@<服务器公网IP>:/opt/opencode-go-usage-api/certs/cert.pem C:\Users\<你的用户名>\Desktop\cert.crt
+```json
+{
+  "success": false,
+  "reason": "登录凭证已失效，请重新获取 auth cookie",
+  "data": ""
+}
 ```
 
-双击桌面上的 `cert.crt` 安装证书，安装位置选 “受信任的根证书颁发机构”。
-
----
-
-## 运维
-
-| 操作         | 命令                                                    |
-| ------------ | ------------------------------------------------------- |
-| 重启         | `systemctl restart opencode-go-usage-api`               |
-| 停止         | `systemctl stop opencode-go-usage-api`                  |
-| 看状态       | `systemctl status opencode-go-usage-api`                |
-| 看日志       | `journalctl -u opencode-go-usage-api -f`                |
-| 改配置后生效 | 编辑 `.env` → `systemctl restart opencode-go-usage-api` |
-
-### cookie 失效怎么办
-
-`auth` cookie 会过期。当 `/usage` 返回 `success:false` 且 `reason` 为 **「登录凭证已失效，请重新获取 auth cookie」** 时，说明 cookie 已失效——重新登录 OpenCode，复制新的 `auth` 值填进 `.env`，`systemctl restart`。
-
-> 其它 `success:false` 文案含义不同：`抓取失败：…` 为网络/上游异常，`当前账号无 OpenCode Go 订阅` 为该账号无 Go 套餐，`未能从页面解析出用量数据…` 多为页面结构变更。仅「凭证已失效」需要换 cookie。
+`抓取失败：…` 表示网络或上游异常，`当前账号无 OpenCode Go 订阅` 表示该工作区没有 Go 套餐，`未能从页面解析出用量数据…` 通常表示页面结构发生变化。
 
 ## 许可证
 
-本项目基于 [MIT 许可证](LICENSE) 开源。
+[MIT](LICENSE)

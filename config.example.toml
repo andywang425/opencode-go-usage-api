@@ -1,0 +1,34 @@
+# 复制本文件为 config.toml，并确保只有服务用户可读：chmod 600 config.toml
+
+[server]
+# 第三方请求使用 Authorization: Bearer <api_token>
+api_token = "replace-with-a-strong-random-token"
+host = "0.0.0.0"
+port = 18443
+
+# 两项必须同时填写或同时留空；留空时使用 HTTP
+ssl_certfile = ""
+ssl_keyfile = ""
+
+[fetch]
+timeout = 10
+retries = 1
+locale = "zh"
+user_agent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
+
+[response]
+# 留空时使用下方默认格式；未知占位符会原样保留
+data_template = "滚动 {rolling_percent}% ({rolling_reset}) | 周 {weekly_percent}% ({weekly_reset}) | 月 {monthly_percent}% ({monthly_reset})"
+
+[account]
+# 即使只配置一个账号也必须明确指定默认账号
+default = "main"
+
+# 账号 ID 支持大小写字母、数字、_、-，最长 64 位，且大小写敏感
+[accounts.main]
+auth_cookie = "replace-with-main-auth-cookie"
+workspace_id = "wrk_main"
+
+[accounts.backup]
+auth_cookie = "replace-with-backup-auth-cookie"
+workspace_id = "wrk_backup"
