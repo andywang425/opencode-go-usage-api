@@ -2,7 +2,7 @@
 
 被访问时实时抓取指定 OpenCode Go 工作区页面，解析用量数据并返回 JSON。支持在一个服务中配置多个 OpenCode Go 账号，供 [CC Switch](https://ccswitch.io/) 的用量查询功能使用。
 
-当 CC Switch 官方支持 OpenCode Go 的用量查询或 OpenCode 提供了 JSON 格式的用量查询接口后，本项目将停止维护。
+当 CC Switch 官方支持了 OpenCode Go 的用量查询或 OpenCode 提供了 JSON 格式的用量查询接口后，本项目将停止维护。相关 issue 和 PR：[#2260](https://github.com/farion1231/cc-switch/issues/2260)，[#3606](https://github.com/farion1231/cc-switch/pull/3606)
 
 ## API
 
@@ -193,7 +193,7 @@ journalctl -u opencode-go-usage-api -f
 });
 ```
 
-默认账号也可以继续使用 `/usage`。如果使用自签证书，需要将证书导入运行 CC Switch 的操作系统的信任证书库。
+若不填 `/<ACCOUNT_ID>` 则查询默认账号的用量。如果使用自签证书，需要将证书导入运行 CC Switch 的操作系统的信任证书库。
 
 ## Cookie 失效
 
