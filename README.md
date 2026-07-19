@@ -25,7 +25,7 @@
 - `reason`：抓取或解析失败时说明原因。
 - `data`：用量与重置倒计时，可通过配置模板自定义。
 
-已知账号的凭据失效、抓取失败和解析失败仍返回 HTTP 200，并通过 `success:false` 表示，便于 CC Switch 提取错误信息。未知账号返回 HTTP 404，鉴权失败返回 HTTP 401。
+已知账号的凭据失效、抓取失败和解析失败仍返回 HTTP 200，并通过 `success:false` 表示。未知账号返回 HTTP 404，鉴权失败返回 HTTP 401。
 
 ### 健康检查
 
@@ -114,7 +114,7 @@ data_template = "R {rolling_percent}% / W {weekly_percent}% / M {monthly_percent
 
 ## 部署
 
-以下示例假设 Ubuntu 24.04、项目目录 `/opt/opencode-go-usage-api`。
+以下示例假设 Ubuntu 24.04、项目目录 `/opt/opencode-go-usage-api`。需要 [uv](https://docs.astral.sh/uv/)。
 
 ```bash
 cd /opt
@@ -133,7 +133,7 @@ chmod +x gen-cert.sh
 ./gen-cert.sh <公网IP>
 ```
 
-然后将生成的路径写入 `config.toml`：
+然后将生成的证书的路径写入 `config.toml`：
 
 ```toml
 [server]
@@ -160,7 +160,7 @@ systemctl restart opencode-go-usage-api
 
 记得在云厂商安全组 / 防火墙放行 `server.port`（默认 `18443`）。
 
-验证服务，使用自签证书时保留 `-k`：
+验证服务（使用自签证书时需添加 `-k`）：
 
 ```bash
 curl -k https://127.0.0.1:18443/health
@@ -195,6 +195,8 @@ journalctl -u opencode-go-usage-api -f
 
 若不填 `/<ACCOUNT_ID>` 则查询默认账号的用量。如果使用自签证书，需要将证书导入运行 CC Switch 的操作系统的信任证书库。
 
+Windows 11 安装自签证书的方法：用任意方式下载 `certs/cert.pem` 到本地，将其重命名为 `cert.crt`，双击，安装证书 → 存储位置选择用户 → 将所有证书都放入下列存储，浏览 → 受信任的根证书颁发机构 → 下一步，完成。
+
 ## Cookie 失效
 
 当接口返回以下结果时，重新登录对应 OpenCode 账号并更新其 `auth_cookie`，然后重启服务：
@@ -210,8 +212,6 @@ journalctl -u opencode-go-usage-api -f
 `抓取失败：…` 表示网络或上游异常，`当前账号无 OpenCode Go 订阅` 表示该工作区没有 Go 套餐，`未能从页面解析出用量数据…` 通常表示页面结构发生变化。
 
 ## 本地开发
-
-需要 [uv](https://docs.astral.sh/uv/)。
 
 ```bash
 uv sync
