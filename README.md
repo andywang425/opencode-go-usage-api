@@ -71,7 +71,7 @@ auth_cookie = "备用账号的 auth cookie 值"
 workspace_id = "wrk_backup"
 ```
 
-账号 ID 支持 1–64 位大小写字母、数字、`_`、`-`，首位必须是字母或数字。账号 ID 大小写敏感，因此 `Main` 和 `main` 是不同账号。即使只有一个账号，也必须设置 `[account].default`。
+账号 ID 支持 1–64 位大小写字母、数字、`_`、`-`，首位必须是字母或数字，大小写敏感。`[account].default` 必填。
 
 配置会在启动时严格校验。未知字段、空凭据、无效默认账号、不完整的 TLS 配置等都会阻止服务启动。修改配置后需要重启服务。
 
@@ -105,7 +105,7 @@ workspace_id = "wrk_backup"
 | `weekly`  | 每周用量 | `reset`   | 距重置倒计时 |
 | `monthly` | 每月用量 | `status`  | 状态文本     |
 
-三种分组都支持 `percent`、`reset` 和 `status`。缺失值显示为 `—`，未知的简单占位符会原样保留；模板语法错误会导致配置校验失败。
+三种分组都支持 `percent`、`reset` 和 `status`。缺失值显示为 `—`。
 
 ```toml
 [response]
