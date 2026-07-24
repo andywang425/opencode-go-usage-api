@@ -17,7 +17,7 @@ def build_response(
     except AuthExpiredError:
         return {
             "success": False,
-            "reason": "登录凭证已失效，请重新获取 auth cookie",
+            "reason": "登录凭证已失效，请重新获取 auth cookie；若 cookie 确认有效，请检查 workspace_id 是否正确",
             "data": "",
         }
     except FetchError as exc:

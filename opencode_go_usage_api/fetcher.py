@@ -12,7 +12,7 @@ class FetchError(Exception):
 
 
 class AuthExpiredError(FetchError):
-    """auth cookie 缺失或失效；重试无意义。"""
+    """被重定向到登录页：auth cookie 失效，或 workspace_id 错误/无权访问。重试无意义。"""
 
 
 _LOGIN_PAGE_MARKER = "<title>OpenAuth</title>"
@@ -44,12 +44,15 @@ def fetch_html(account: AccountConfig, settings: FetchConfig) -> str:
             ) as client:
                 resp = client.get(account.workspace_url)
             if _is_login_page(resp):
-                raise AuthExpiredError("被重定向到登录页，登录凭证可能已失效")
+                raise AuthExpiredError(
+                    "被重定向到登录页，登录凭证可能已失效，或 workspace_id 错误/无权访问"
+                )
             if resp.status_code != 200:
                 raise FetchError(f"上游返回 HTTP {resp.status_code}")
             return resp.text
-        except AuthExpiredError:
+        except FetchError:
+            # 凭证失效和上游非 200 都是明确失败，重试无意义，直接上报
             raise
-        except Exception as exc:  # noqa: BLE001 网络层及上游 HTTP 异常统一重试
+        except Exception as exc:  # noqa: BLE001 网络层异常（超时、连接失败）统一重试
             last_exc = exc
     raise FetchError(f"无法连接 OpenCode（超时或上游异常）：{last_exc}")

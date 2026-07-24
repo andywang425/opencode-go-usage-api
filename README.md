@@ -204,7 +204,7 @@ Windows 11 安装自签证书的方法：用任意方式下载 `certs/cert.pem` 
 ```json
 {
   "success": false,
-  "reason": "登录凭证已失效，请重新获取 auth cookie",
+  "reason": "登录凭证已失效，请重新获取 auth cookie；若 cookie 确认有效，请检查 workspace_id 是否正确",
   "data": ""
 }
 ```

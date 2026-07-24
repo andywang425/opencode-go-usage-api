@@ -26,7 +26,11 @@ def create_app(
 
     def require_token(authorization: str = Header(default="")) -> None:
         expected = f"Bearer {config.server.api_token}"
-        if not hmac.compare_digest(authorization, expected):
+        # 请求头按 latin-1 解码可能含非 ASCII 字符，而 compare_digest 不支持
+        # 非 ASCII 字符串（抛 TypeError 变成 500），因此统一编码为 bytes 再比较。
+        if not hmac.compare_digest(
+            authorization.encode("utf-8"), expected.encode("utf-8")
+        ):
             raise UnauthorizedError()
 
     def response_for(account: AccountConfig) -> JSONResponse:
