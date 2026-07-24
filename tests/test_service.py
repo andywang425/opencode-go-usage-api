@@ -12,15 +12,51 @@ TEMPLATE = "{rolling_percent}% | {weekly_percent}% | {monthly_percent}%"
 
 INLINE_OK_HTML = """
 <script>
-rollingUsage: $R[1] = { status: "ok", resetInSec: 18000, usagePercent: 10 }
-weeklyUsage: $R[2] = { status: "ok", resetInSec: 200000, usagePercent: 20 }
-monthlyUsage: $R[3] = { status: "ok", resetInSec: 2000000, usagePercent: 30 }
+$R[28]($R[18], $R[31] = {
+    mine: !0,
+    useBalance: !1,
+    region: $R[32] = ["us", "eu", "sg", "cn"],
+    rollingUsage: $R[33] = {
+        status: "ok",
+        resetInSec: 18000,
+        usagePercent: 10
+    },
+    weeklyUsage: $R[34] = {
+        status: "ok",
+        resetInSec: 189112,
+        usagePercent: 20
+    },
+    monthlyUsage: $R[35] = {
+        status: "ok",
+        resetInSec: 2547316,
+        usagePercent: 30
+    }
+});
 </script>
 """
 
 NO_SUB_HTML = """
-<div data-slot="subscribe-button">订阅 Go</div>
-<script>lite: null, liteSubscriptionID: null,</script>
+<section data-hk="0000000100000000000100000500a1400440" class="_root_9awwr_1">
+    <p data-slot="promo-description">
+        OpenCode Go 起价为 <strong>首月 $5</strong>，之后 $10/月。
+    </p>
+    <div data-slot="subscribe-actions">
+        <button data-slot="subscribe-button" data-color="primary">订阅 Go</button>
+    </div>
+</section>
+<script>
+$R[28]($R[22], $R[31] = {
+    customerID: "cus_TEST000000002",
+    paymentMethodType: "alipay",
+    balance: 0,
+    subscription: null,
+    subscriptionID: null,
+    lite: null,
+    liteSubscriptionID: null
+});
+$R[28]($R[18], null);
+$R[28]($R[20], null);
+</script>
 """
 
 
