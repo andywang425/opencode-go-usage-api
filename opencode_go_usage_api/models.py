@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-@dataclass
+@dataclass(frozen=True)
 class Usage:
     """单项用量：已用百分比 + 距下次重置的秒数 + 状态。
 

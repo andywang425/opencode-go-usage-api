@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 from .formatter import DEFAULT_DATA_TEMPLATE, validate_template
 
-CONFIG_PATH = Path.cwd() / "config.toml"
+CONFIG_FILENAME = "config.toml"
 
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -134,8 +134,10 @@ def _optional_path(table: Mapping[str, Any], key: str, context: str) -> str | No
     return value or None
 
 
-def load_config(path: Path = CONFIG_PATH) -> AppConfig:
+def load_config(path: Path | None = None) -> AppConfig:
     """读取并严格校验一个 TOML 配置文件。"""
+    if path is None:
+        path = Path.cwd() / CONFIG_FILENAME
     try:
         with path.open("rb") as file:
             raw = tomllib.load(file)

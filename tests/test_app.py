@@ -59,7 +59,7 @@ def test_account_ids_are_case_sensitive() -> None:
     response = client.get("/usage/main", headers=AUTH_HEADER)
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "账号不存在"}
+    assert response.json() == {"success": False, "reason": "账号不存在", "data": ""}
 
 
 def test_unknown_account_requires_auth_before_404() -> None:
@@ -68,7 +68,7 @@ def test_unknown_account_requires_auth_before_404() -> None:
     response = client.get("/usage/missing")
 
     assert response.status_code == 401
-    assert response.json() == {"detail": "未授权"}
+    assert response.json() == {"success": False, "reason": "未授权", "data": ""}
 
 
 def test_business_failure_keeps_http_200() -> None:

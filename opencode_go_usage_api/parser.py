@@ -76,12 +76,13 @@ def parse_inline(html: str) -> dict[str, Usage]:
 # 当内联区结构变化抽不到时，退回渲染后 DOM 抓百分比。
 # DOM 里没有精确 resetInSec，但 reset-time span 有「重置于 X 天 Y 小时」原文，
 # 直接抠出来原文返回（不反解析为秒、不依赖语言），仅百分比仍由 DOM 提供。
+#
+# 页面固定包含 3 个 data-slot="usage-item" 块，顺序为 rolling → weekly → monthly，
+# 通过结构定位而非文本标签匹配，因此与 locale 无关。
 
-_DOM_LABELS = {
-    "rolling": "滚动用量",
-    "weekly": "每周用量",
-    "monthly": "每月用量",
-}
+_DOM_ORDER = ("rolling", "weekly", "monthly")
+
+_USAGE_ITEM_RE = re.compile(r'data-slot="usage-item"')
 
 
 def _clean_reset_text(raw: str) -> str | None:
@@ -93,19 +94,21 @@ def _clean_reset_text(raw: str) -> str | None:
 
 def parse_dom(html: str) -> dict[str, Usage]:
     result: dict[str, Usage] = {}
-    for name, label in _DOM_LABELS.items():
-        # 在标签文本之后就近找 usage-value 里的百分比数字
-        label_pos = html.find(label)
-        if label_pos == -1:
-            continue
-        segment = html[label_pos: label_pos + 400]
+    item_starts = [m.start() for m in _USAGE_ITEM_RE.finditer(html)]
+    for idx, name in enumerate(_DOM_ORDER):
+        if idx >= len(item_starts):
+            break
+        # 截取当前 item 到下一个 item（或 +800 字符兜底）之间的片段
+        seg_start = item_starts[idx]
+        seg_end = item_starts[idx + 1] if idx + 1 < len(item_starts) else seg_start + 800
+        segment = html[seg_start:seg_end]
+        # 优先从 usage-value slot 抽百分比
         m = re.search(r'data-slot="usage-value">\s*(?:<!--.*?-->)?\s*(\d+)', segment, re.S)
         if not m:
             # 退一步：从 progress-bar 的 width:N% 抽
             m = re.search(r"width:\s*(\d+)%", segment)
         if not m:
             continue
-        # 同一 usage-item 内就近抠 reset-time 原文（无则留空，fmt_reset 会给 ?）
         rt = re.search(r'data-slot="reset-time">\s*(.*?)</span>', segment, re.S)
         reset_text = _clean_reset_text(rt.group(1)) if rt else None
         result[name] = Usage(

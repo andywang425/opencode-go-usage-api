@@ -20,7 +20,7 @@ _LOGIN_PAGE_MARKER = "<title>OpenAuth</title>"
 
 def _is_login_page(resp: httpx2.Response) -> bool:
     """判断响应是否落在登录或选择登录方式页面。"""
-    final = httpx2.URL(resp.url)
+    final = resp.url
     if final.host == "auth.opencode.ai":
         return True
     if final.host == "opencode.ai" and final.path.startswith("/auth"):
@@ -50,8 +50,6 @@ def fetch_html(account: AccountConfig, settings: FetchConfig) -> str:
             return resp.text
         except AuthExpiredError:
             raise
-        except FetchError:
-            raise
-        except Exception as exc:  # noqa: BLE001 网络层各类异常统一归类
+        except Exception as exc:  # noqa: BLE001 网络层及上游 HTTP 异常统一重试
             last_exc = exc
     raise FetchError(f"无法连接 OpenCode（超时或上游异常）：{last_exc}")
