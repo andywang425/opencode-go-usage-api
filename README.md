@@ -44,7 +44,7 @@ chmod 600 config.toml
 
 ```toml
 [server]
-api_token = "使用 openssl rand -hex 32 生成的强随机值"
+api_token = "建议使用 openssl rand -hex 32 生成一个强随机值"
 host = "0.0.0.0"
 port = 18443
 ssl_certfile = "certs/cert.pem"
@@ -71,9 +71,9 @@ auth_cookie = "备用账号的 auth cookie 值"
 workspace_id = "wrk_backup"
 ```
 
-账号 ID 支持 1–64 位大小写字母、数字、`_`、`-`，首位必须是字母或数字，大小写敏感。`[account].default` 必填。
+账号 ID 支持 1–64 位大小写字母、数字、`_`、`-`，首位必须是字母或数字，大小写敏感。
 
-配置会在启动时严格校验。未知字段、空凭据、无效默认账号、不完整的 TLS 配置等都会阻止服务启动。修改配置后需要重启服务。
+程序启动时会校验配置。修改配置文件后需要重启服务使新配置生效。
 
 ### 配置项
 
@@ -97,24 +97,32 @@ workspace_id = "wrk_backup"
 
 ### 自定义 data 格式
 
-模板占位符由分组和字段组成，例如 `{rolling_percent}`：
+模板占位符由分组和字段组成，格式为 `{<分组>_<字段>}`。有三种分组：
 
-| 分组      | 含义     | 字段      | 含义         |
-| --------- | -------- | --------- | ------------ |
-| `rolling` | 滚动用量 | `percent` | 已用百分比   |
-| `weekly`  | 每周用量 | `reset`   | 距重置倒计时 |
-| `monthly` | 每月用量 | `status`  | 状态文本     |
+| 分组      | 含义     |
+| --------- | -------- |
+| `rolling` | 滚动用量 |
+| `weekly`  | 每周用量 |
+| `monthly` | 每月用量 |
 
-三种分组都支持 `percent`、`reset` 和 `status`。缺失值显示为 `—`。
+每个分组都支持三种字段：
+
+| 字段      | 含义         |
+| --------- | ------------ |
+| `percent` | 已用百分比   |
+| `reset`   | 距重置倒计时 |
+| `status`  | 状态文本     |
+
+简洁风格配置示例：
 
 ```toml
 [response]
-data_template = "R {rolling_percent}% / W {weekly_percent}% / M {monthly_percent}%"
+data_template = "R {rolling_percent}% ({rolling_reset}) | W {weekly_percent}% ({weekly_reset}) | M {monthly_percent}% ({monthly_reset})"
 ```
 
 ## 部署
 
-以下示例假设 Ubuntu 24.04、项目目录 `/opt/opencode-go-usage-api`。需要 [uv](https://docs.astral.sh/uv/)。
+以下示例假设系统为 Ubuntu 24.04、项目目录为 `/opt/opencode-go-usage-api`，已安装 [uv](https://docs.astral.sh/uv/)。
 
 ```bash
 cd /opt
@@ -152,7 +160,7 @@ systemctl enable --now opencode-go-usage-api
 systemctl status opencode-go-usage-api
 ```
 
-修改配置后执行：
+如果后续修改了配置，需重启服务使其生效：
 
 ```bash
 systemctl restart opencode-go-usage-api
