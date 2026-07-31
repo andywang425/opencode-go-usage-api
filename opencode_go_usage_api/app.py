@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import hmac
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 
+import httpx2
 from fastapi import Depends, FastAPI, Header, Request
 from fastapi.responses import JSONResponse
 
 from .config import AccountConfig, AppConfig, FetchConfig
+from .fetcher import create_client
 from .service import build_response
 
-ResponseBuilder = Callable[[AccountConfig, FetchConfig, str], dict]
+ResponseBuilder = Callable[[AccountConfig, FetchConfig, str, httpx2.Client], dict]
 
 
 class UnauthorizedError(Exception):
@@ -22,7 +25,23 @@ def create_app(
     config: AppConfig, response_builder: ResponseBuilder = build_response
 ) -> FastAPI:
     """使用已校验配置创建应用，便于启动和测试共用同一条路径。"""
-    app = FastAPI(title="OpenCode Go Usage API", docs_url=None, redoc_url=None)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # 每个账号一个应用生命周期内常驻的 Client，复用连接池/TLS 会话
+        app.state.http_clients = {
+            account_id: create_client(account, config.fetch)
+            for account_id, account in config.accounts.items()
+        }
+        try:
+            yield
+        finally:
+            for client in app.state.http_clients.values():
+                client.close()
+
+    app = FastAPI(
+        title="OpenCode Go Usage API", docs_url=None, redoc_url=None, lifespan=lifespan
+    )
 
     def require_token(authorization: str = Header(default="")) -> None:
         expected = f"Bearer {config.server.api_token}"
@@ -36,7 +55,10 @@ def create_app(
     def response_for(account: AccountConfig) -> JSONResponse:
         return JSONResponse(
             response_builder(
-                account, config.fetch, config.response.data_template
+                account,
+                config.fetch,
+                config.response.data_template,
+                app.state.http_clients[account.account_id],
             )
         )
 

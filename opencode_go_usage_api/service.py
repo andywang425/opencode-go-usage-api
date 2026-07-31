@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import httpx2
+
 from .config import AccountConfig, FetchConfig
 from .fetcher import AuthExpiredError, FetchError, fetch_html
 from .formatter import build_data
@@ -9,11 +11,14 @@ from .parser import is_no_subscription, parse_usage
 
 
 def build_response(
-    account: AccountConfig, fetch_config: FetchConfig, data_template: str
+    account: AccountConfig,
+    fetch_config: FetchConfig,
+    data_template: str,
+    client: httpx2.Client,
 ) -> dict:
     """实时查询一个账号；任何业务失败都归一为 success:false。"""
     try:
-        html = fetch_html(account, fetch_config)
+        html = fetch_html(account, fetch_config, client)
     except AuthExpiredError:
         return {
             "success": False,

@@ -9,6 +9,8 @@ from opencode_go_usage_api.service import build_response
 ACCOUNT = AccountConfig("test", "cookie", "wrk_test")
 FETCH_CFG = FetchConfig(timeout=10, retries=1, locale="zh", user_agent="test")
 TEMPLATE = "{rolling_percent}% | {weekly_percent}% | {monthly_percent}%"
+# build_response 只把它透传给被 mock 掉的 fetch_html，占位对象即可
+CLIENT = object()
 
 INLINE_OK_HTML = """
 <script>
@@ -61,7 +63,7 @@ $R[28]($R[20], null);
 
 
 def _patch_fetch(monkeypatch, html: str | None = None, exc: Exception | None = None) -> None:
-    def fake_fetch(account, settings):
+    def fake_fetch(account, settings, client):
         if exc:
             raise exc
         return html
@@ -71,7 +73,7 @@ def _patch_fetch(monkeypatch, html: str | None = None, exc: Exception | None = N
 class TestBuildResponseSuccess:
     def test_success_with_inline_data(self, monkeypatch) -> None:
         _patch_fetch(monkeypatch, html=INLINE_OK_HTML)
-        result = build_response(ACCOUNT, FETCH_CFG, TEMPLATE)
+        result = build_response(ACCOUNT, FETCH_CFG, TEMPLATE, CLIENT)
         assert result["success"] is True
         assert result["reason"] == ""
         assert result["data"] == "10% | 20% | 30%"
@@ -79,7 +81,7 @@ class TestBuildResponseSuccess:
     def test_success_uses_default_template(self, monkeypatch) -> None:
         _patch_fetch(monkeypatch, html=INLINE_OK_HTML)
         from opencode_go_usage_api.formatter import DEFAULT_DATA_TEMPLATE
-        result = build_response(ACCOUNT, FETCH_CFG, DEFAULT_DATA_TEMPLATE)
+        result = build_response(ACCOUNT, FETCH_CFG, DEFAULT_DATA_TEMPLATE, CLIENT)
         assert result["success"] is True
         assert "10%" in result["data"]
 
@@ -87,14 +89,14 @@ class TestBuildResponseSuccess:
 class TestBuildResponseFetchErrors:
     def test_auth_expired(self, monkeypatch) -> None:
         _patch_fetch(monkeypatch, exc=AuthExpiredError("cookie 失效"))
-        result = build_response(ACCOUNT, FETCH_CFG, TEMPLATE)
+        result = build_response(ACCOUNT, FETCH_CFG, TEMPLATE, CLIENT)
         assert result["success"] is False
         assert "凭证" in result["reason"]
         assert result["data"] == ""
 
     def test_fetch_error(self, monkeypatch) -> None:
         _patch_fetch(monkeypatch, exc=FetchError("超时"))
-        result = build_response(ACCOUNT, FETCH_CFG, TEMPLATE)
+        result = build_response(ACCOUNT, FETCH_CFG, TEMPLATE, CLIENT)
         assert result["success"] is False
         assert "抓取失败" in result["reason"]
         assert result["data"] == ""
@@ -103,13 +105,13 @@ class TestBuildResponseFetchErrors:
 class TestBuildResponseParseErrors:
     def test_no_subscription(self, monkeypatch) -> None:
         _patch_fetch(monkeypatch, html=NO_SUB_HTML)
-        result = build_response(ACCOUNT, FETCH_CFG, TEMPLATE)
+        result = build_response(ACCOUNT, FETCH_CFG, TEMPLATE, CLIENT)
         assert result["success"] is False
         assert "订阅" in result["reason"]
 
     def test_unparseable_page(self, monkeypatch) -> None:
         _patch_fetch(monkeypatch, html="<html>completely different structure</html>")
-        result = build_response(ACCOUNT, FETCH_CFG, TEMPLATE)
+        result = build_response(ACCOUNT, FETCH_CFG, TEMPLATE, CLIENT)
         assert result["success"] is False
         assert "解析" in result["reason"]
         assert result["data"] == ""
