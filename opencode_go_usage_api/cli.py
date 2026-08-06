@@ -1,4 +1,4 @@
-"""CLI 入口：读取 config.toml 并启动 API。"""
+"""CLI entrypoint: read config.toml and start the API."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ def main() -> None:
     try:
         config = load_config()
     except ConfigError as exc:
-        print(f"配置错误：{exc}", file=sys.stderr)
+        print(f"configuration error: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
 
     uvicorn.run(

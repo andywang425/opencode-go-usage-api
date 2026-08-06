@@ -49,14 +49,14 @@ def test_rejects_unknown_fields(tmp_path: Path) -> None:
         'api_token = "api-secret"\napi_tokne = "typo"',
     )
 
-    with pytest.raises(ConfigError, match="server 包含未知字段：api_tokne"):
+    with pytest.raises(ConfigError, match="server contains unknown fields: api_tokne"):
         load_config(write_config(tmp_path, content))
 
 
 def test_rejects_missing_default_account(tmp_path: Path) -> None:
     content = VALID_CONFIG.replace('default = "Main"', 'default = "missing"')
 
-    with pytest.raises(ConfigError, match="默认账号 'missing' 不存在"):
+    with pytest.raises(ConfigError, match="default account 'missing' not present in accounts"):
         load_config(write_config(tmp_path, content))
 
 
@@ -66,7 +66,7 @@ def test_rejects_non_url_safe_account_ids(
 ) -> None:
     content = VALID_CONFIG.replace("[accounts.Main]", f'[accounts."{account_id}"]')
 
-    with pytest.raises(ConfigError, match="账号 ID .* 非法"):
+    with pytest.raises(ConfigError, match="invalid account ID .*"):
         load_config(write_config(tmp_path, content))
 
 
@@ -76,14 +76,14 @@ def test_requires_both_tls_paths(tmp_path: Path) -> None:
         'api_token = "api-secret"\nssl_certfile = "certs/cert.pem"',
     )
 
-    with pytest.raises(ConfigError, match="必须同时配置或同时留空"):
+    with pytest.raises(ConfigError, match="must be set together or both empty"):
         load_config(write_config(tmp_path, content))
 
 
 def test_rejects_invalid_data_template(tmp_path: Path) -> None:
     content = VALID_CONFIG + '\n[response]\ndata_template = "broken {"\n'
 
-    with pytest.raises(ConfigError, match="response.data_template 模板非法"):
+    with pytest.raises(ConfigError, match="response.data_template template is invalid"):
         load_config(write_config(tmp_path, content))
 
 

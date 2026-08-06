@@ -1,50 +1,50 @@
-# OpenCode Go 用量 API
+# OpenCode Go Usage API
 
-被访问时实时抓取指定 OpenCode Go 工作区页面，解析用量数据并返回 JSON。支持在一个服务中配置多个 OpenCode Go 账号，供 [CC Switch](https://ccswitch.io/) 的用量查询功能使用。
+Live-scrapes the specified OpenCode Go workspace page on each request, parses the usage data, and returns it as JSON. Multiple OpenCode Go accounts can be configured in a single service, for use with the usage-query feature of [CC Switch](https://ccswitch.io/).
 
-当 CC Switch 官方支持了 OpenCode Go 的用量查询或 OpenCode 提供了 JSON 格式的用量查询接口后，本项目将停止维护。相关 issue 和 PR：[#2260](https://github.com/farion1231/cc-switch/issues/2260)，[#3606](https://github.com/farion1231/cc-switch/pull/3606)
+This project will stop being maintained once CC Switch officially supports OpenCode Go usage queries, or OpenCode provides a JSON usage-query API. Related issue and PR: [#2260](https://github.com/farion1231/cc-switch/issues/2260), [#3606](https://github.com/farion1231/cc-switch/pull/3606)
 
 ## API
 
-### 查询用量
+### Query usage
 
-- `GET /usage`：查询 `config.toml` 中指定的默认账号。
-- `GET /usage/{account_id}`：查询指定账号，例如 `/usage/backup`。
+- `GET /usage`: queries the default account specified in `config.toml`.
+- `GET /usage/{account_id}`: queries a specific account, e.g. `/usage/backup`.
 
-两个接口都需要请求头 `Authorization: Bearer <API_TOKEN>`，成功响应格式一致：
+Both endpoints require the header `Authorization: Bearer <API_TOKEN>`. The response format is:
 
 ```json
 {
   "success": true,
   "reason": "",
-  "data": "滚动 0% (5h) | 周 7% (3d16h) | 月 3% (29d22h)"
+  "data": "Rolling 0% (5h) | Weekly 7% (3d16h) | Monthly 3% (29d22h)"
 }
 ```
 
-- `success`：解析出至少一组用量时为 `true`。
-- `reason`：抓取或解析失败时说明原因。
-- `data`：用量与重置倒计时，可通过配置模板自定义。
+- `success`: `true` when at least one usage group was parsed.
+- `reason`: explains the reason when fetching or parsing fails.
+- `data`: usage and reset countdown, customizable via the config template.
 
-已知账号的凭据失效、抓取失败和解析失败仍返回 HTTP 200，并通过 `success:false` 表示。未知账号返回 HTTP 404，鉴权失败返回 HTTP 401。
+Expired credentials, fetch failures, and parse failures for a known account still return HTTP 200, indicated by `success:false`. Unknown accounts return HTTP 404, and auth failures return HTTP 401.
 
-### 健康检查
+### Health check
 
-`GET /health` 免鉴权，返回 `{"status":"ok"}`。该接口只检查服务存活，不抓取账号页面。
+`GET /health` requires no auth and returns `{"status":"ok"}`. This endpoint only checks that the service is alive; it does not fetch any account page.
 
-## 配置
+## Configuration
 
-服务固定读取当前工作目录下的 `config.toml`。复制示例并限制文件权限：
+The service always reads `config.toml` from the current working directory. Copy the example and restrict file permissions:
 
 ```bash
 cp config.example.toml config.toml
 chmod 600 config.toml
 ```
 
-完整示例：
+Full example:
 
 ```toml
 [server]
-api_token = "建议使用 openssl rand -hex 32 生成一个强随机值"
+api_token = "generate a strong random value, e.g. with openssl rand -hex 32"
 host = "0.0.0.0"
 port = 18443
 ssl_certfile = "certs/cert.pem"
@@ -53,76 +53,76 @@ ssl_keyfile = "certs/key.pem"
 [fetch]
 timeout = 10
 retries = 1
-locale = "zh"
+locale = "en"
 user_agent = "Mozilla/5.0 ..."
 
 [response]
-data_template = "滚动 {rolling_percent}% ({rolling_reset}) | 周 {weekly_percent}% ({weekly_reset}) | 月 {monthly_percent}% ({monthly_reset})"
+data_template = "Rolling {rolling_percent}% ({rolling_reset}) | Weekly {weekly_percent}% ({weekly_reset}) | Monthly {monthly_percent}% ({monthly_reset})"
 
 [account]
 default = "main"
 
 [accounts.main]
-auth_cookie = "主账号的 auth cookie 值"
+auth_cookie = "the main account's auth cookie value"
 workspace_id = "wrk_main"
 
 [accounts.backup]
-auth_cookie = "备用账号的 auth cookie 值"
+auth_cookie = "the backup account's auth cookie value"
 workspace_id = "wrk_backup"
 ```
 
-账号 ID 支持 1–64 位大小写字母、数字、`_`、`-`，首位必须是字母或数字，大小写敏感。
+Account IDs support 1-64 letters (upper and lower case), digits, `_`, and `-`; the first character must be a letter or digit, and they are case-sensitive.
 
-程序启动时会校验配置。修改配置文件后需要重启服务使新配置生效。
+The config is validated at startup. After modifying the config file, restart the service for the changes to take effect.
 
-### 配置项
+### Configuration options
 
-| 配置                                  | 默认值        | 说明                            |
-| ------------------------------------- | ------------- | ------------------------------- |
-| `server.api_token`                    | 无            | API 访问密钥，必填              |
-| `server.host`                         | `0.0.0.0`     | 监听地址                        |
-| `server.port`                         | `18443`       | 监听端口                        |
-| `server.ssl_certfile` / `ssl_keyfile` | 空            | 必须同时填写；均为空时使用 HTTP |
-| `fetch.timeout`                       | `10`          | 单次抓取超时秒数                |
-| `fetch.retries`                       | `1`           | 网络异常后的重试次数            |
-| `fetch.locale`                        | `zh`          | OpenCode 的 `oc_locale` cookie  |
-| `fetch.user_agent`                    | 内置浏览器 UA | 上游请求的 User-Agent           |
-| `response.data_template`              | 内置模板      | 响应 `data` 字段模板            |
-| `account.default`                     | 无            | 默认账号 ID，必填               |
-| `accounts.<id>.auth_cookie`           | 无            | 该账号的原始 `auth` cookie 值   |
-| `accounts.<id>.workspace_id`          | 无            | 该账号对应的工作区 ID           |
+| Config                                  | Default        | Description                          |
+| --------------------------------------- | -------------- | ------------------------------------ |
+| `server.api_token`                      | none           | API access token, required           |
+| `server.host`                           | `0.0.0.0`      | Listen address                       |
+| `server.port`                           | `18443`        | Listen port                          |
+| `server.ssl_certfile` / `ssl_keyfile`   | empty          | Must be set together; HTTP when both empty |
+| `fetch.timeout`                         | `10`           | Single fetch timeout in seconds      |
+| `fetch.retries`                         | `1`            | Retries after a network error        |
+| `fetch.locale`                          | `en`           | The OpenCode `oc_locale` cookie      |
+| `fetch.user_agent`                      | built-in browser UA | User-Agent for upstream requests |
+| `response.data_template`                | built-in template | Template for the response `data` field |
+| `account.default`                       | none           | Default account ID, required         |
+| `accounts.<id>.auth_cookie`             | none           | The account's raw `auth` cookie value |
+| `accounts.<id>.workspace_id`            | none           | The account's workspace ID           |
 
-- 工作区 ID：`https://opencode.ai/workspace/<这里>/go`
-- Cookie 获取：在浏览器中打开 `https://opencode.ai/workspace/wrk_XXX/go`，通过开发者工具（`F12`）查看
+- Workspace ID: `https://opencode.ai/workspace/<this>/go`
+- Getting the cookie: open `https://opencode.ai/workspace/wrk_XXX/go` in a browser and inspect it with the developer tools (`F12`)
 
-### 自定义 data 格式
+### Custom data format
 
-模板占位符由分组和字段组成，格式为 `{<分组>_<字段>}`。有三种分组：
+Template placeholders consist of a group and a field, formatted as `{<group>_<field>}`. There are three groups:
 
-| 分组      | 含义     |
-| --------- | -------- |
-| `rolling` | 滚动用量 |
-| `weekly`  | 每周用量 |
-| `monthly` | 每月用量 |
+| Group     | Meaning         |
+| --------- | --------------- |
+| `rolling` | Rolling usage   |
+| `weekly`  | Weekly usage    |
+| `monthly` | Monthly usage   |
 
-每个分组都支持三种字段：
+Each group supports three fields:
 
-| 字段      | 含义         |
-| --------- | ------------ |
-| `percent` | 已用百分比   |
-| `reset`   | 距重置倒计时 |
-| `status`  | 状态文本     |
+| Field     | Meaning             |
+| --------- | ------------------- |
+| `percent` | Percent used        |
+| `reset`   | Countdown to reset  |
+| `status`  | Status text         |
 
-简洁风格配置示例：
+Compact-style example:
 
 ```toml
 [response]
 data_template = "R {rolling_percent}% ({rolling_reset}) | W {weekly_percent}% ({weekly_reset}) | M {monthly_percent}% ({monthly_reset})"
 ```
 
-## 部署
+## Deployment
 
-以下示例假设系统为 Ubuntu 24.04、项目目录为 `/opt/opencode-go-usage-api`，已安装 [uv](https://docs.astral.sh/uv/)。
+The examples below assume Ubuntu 24.04, project directory `/opt/opencode-go-usage-api`, and [uv](https://docs.astral.sh/uv/) installed.
 
 ```bash
 cd /opt
@@ -130,18 +130,18 @@ git clone https://github.com/andywang425/opencode-go-usage-api.git
 cd opencode-go-usage-api
 uv sync
 cp config.example.toml config.toml
-# 按需编辑 config.toml
+# edit config.toml as needed
 chmod 600 config.toml
 ```
 
-如需自签证书：
+For a self-signed certificate:
 
 ```bash
 chmod +x gen-cert.sh
-./gen-cert.sh <公网IP>
+./gen-cert.sh <PUBLIC_IP>
 ```
 
-然后将生成的证书的路径写入 `config.toml`：
+Then write the paths of the generated certificates into `config.toml`:
 
 ```toml
 [server]
@@ -149,43 +149,43 @@ ssl_certfile = "certs/cert.pem"
 ssl_keyfile = "certs/key.pem"
 ```
 
-安装 systemd 服务：
+Install the systemd service:
 
 ```bash
 chmod +x run.sh
 cp opencode-go-usage-api.service /etc/systemd/system/
-# 按需编辑 /etc/systemd/system/opencode-go-usage-api.service
+# edit /etc/systemd/system/opencode-go-usage-api.service as needed
 systemctl daemon-reload
 systemctl enable --now opencode-go-usage-api
 systemctl status opencode-go-usage-api
 ```
 
-如果后续修改了配置，需重启服务使其生效：
+If you later modify the config, restart the service for the changes to take effect:
 
 ```bash
 systemctl restart opencode-go-usage-api
 ```
 
-记得在云厂商安全组 / 防火墙放行 `server.port`（默认 `18443`）。
+Remember to allow `server.port` (default `18443`) in your cloud provider's security group / firewall.
 
-验证服务（使用自签证书时需添加 `-k`）：
+Verify the service (add `-k` when using a self-signed certificate):
 
 ```bash
 curl -k https://127.0.0.1:18443/health
-curl -k -H "Authorization: Bearer <API_TOKEN>" https://127.0.0.1:18443/usage
-curl -k -H "Authorization: Bearer <API_TOKEN>" https://127.0.0.1:18443/usage/backup
-# 看日志
+curl -k -H "Authorization: Bearer ***" https://127.0.0.1:18443/usage
+curl -k -H "Authorization: Bearer ***" https://127.0.0.1:18443/usage/backup
+# watch the logs
 journalctl -u opencode-go-usage-api -f
 ```
 
-## CC Switch 接入
+## CC Switch integration
 
-点击配置用量查询图标，预设模板选择自定义，填入以下提取器代码：
+Click the configure-usage-query icon, select Custom for the preset template, and paste in the following extractor code:
 
 ```js
 ({
   request: {
-    url: "https://<公网IP>:<PORT>/usage/<ACCOUNT_ID>",
+    url: "https://<PUBLIC_IP>:<PORT>/usage/<ACCOUNT_ID>",
     method: "GET",
     headers: {
       Authorization: "Bearer <API_TOKEN>",
@@ -201,39 +201,39 @@ journalctl -u opencode-go-usage-api -f
 });
 ```
 
-若不填 `/<ACCOUNT_ID>` 则查询默认账号的用量。如果使用自签证书，需要将证书导入运行 CC Switch 的操作系统的信任证书库。
+If you omit `/<ACCOUNT_ID>`, the default account's usage is queried. If you use a self-signed certificate, you must import the certificate into the trust store of the OS running CC Switch.
 
-Windows 11 安装自签证书的方法：用任意方式下载 `certs/cert.pem` 到本地，将其重命名为 `cert.crt`，双击，安装证书 → 存储位置选择用户 → 将所有证书都放入下列存储，浏览 → 受信任的根证书颁发机构 → 下一步，完成。
+To install a self-signed certificate on Windows 11: download `certs/cert.pem` locally in any way, rename it to `cert.crt`, double-click it, install certificate -> choose Current User for the store location -> place all certificates in the following store, browse -> Trusted Root Certification Authorities -> Next, Finish.
 
-## Cookie 失效
+## Cookie expiry
 
-当接口返回以下结果时，重新登录对应 OpenCode 账号并更新其 `auth_cookie`，然后重启服务：
+When the API returns the following, log back into the corresponding OpenCode account, update its `auth_cookie`, and restart the service:
 
 ```json
 {
   "success": false,
-  "reason": "登录凭证已失效，请重新获取 auth cookie；若 cookie 确认有效，请检查 workspace_id 是否正确",
+  "reason": "auth cookie has expired, please re-fetch it; if the cookie is valid, check that workspace_id is correct",
   "data": ""
 }
 ```
 
-`抓取失败：…` 表示网络或上游异常，`当前账号无 OpenCode Go 订阅` 表示该工作区没有 Go 套餐，`未能从页面解析出用量数据…` 通常表示页面结构发生变化。
+`fetch failed: ...` indicates a network or upstream issue; `this account has no OpenCode Go subscription` means the workspace has no Go plan; `failed to parse usage data from the page (the page structure may have changed)` usually means the page structure changed.
 
-## 本地开发
+## Local development
 
 ```bash
 uv sync
 cp config.example.toml config.toml
-# 编辑 config.toml 后启动
+# start after editing config.toml
 uv run uvicorn opencode_go_usage_api:app --reload
 ```
 
-运行测试：
+Run the tests:
 
 ```bash
 uv run pytest
 ```
 
-## 许可证
+## License
 
 [MIT](LICENSE)

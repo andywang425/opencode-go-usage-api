@@ -1,4 +1,4 @@
-"""service 模块单元测试。"""
+"""Unit tests for the service module."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from opencode_go_usage_api.fetcher import AuthExpiredError, FetchError
 from opencode_go_usage_api.service import build_response
 
 ACCOUNT = AccountConfig("test", "cookie", "wrk_test")
-FETCH_CFG = FetchConfig(timeout=10, retries=1, locale="zh", user_agent="test")
+FETCH_CFG = FetchConfig(timeout=10, retries=1, locale="en", user_agent="test")
 TEMPLATE = "{rolling_percent}% | {weekly_percent}% | {monthly_percent}%"
-# build_response 只把它透传给被 mock 掉的 fetch_html，占位对象即可
+# build_response only passes it through to the mocked fetch_html; a placeholder object is enough
 CLIENT = object()
 
 INLINE_OK_HTML = """
@@ -40,10 +40,10 @@ $R[28]($R[18], $R[31] = {
 NO_SUB_HTML = """
 <section data-hk="0000000100000000000100000500a1400440" class="_root_9awwr_1">
     <p data-slot="promo-description">
-        OpenCode Go 起价为 <strong>首月 $5</strong>，之后 $10/月。
+        OpenCode Go starts at <strong>$5 for the first month</strong>, then $10/month.
     </p>
     <div data-slot="subscribe-actions">
-        <button data-slot="subscribe-button" data-color="primary">订阅 Go</button>
+        <button data-slot="subscribe-button" data-color="primary">Subscribe to Go</button>
     </div>
 </section>
 <script>
@@ -88,17 +88,17 @@ class TestBuildResponseSuccess:
 
 class TestBuildResponseFetchErrors:
     def test_auth_expired(self, monkeypatch) -> None:
-        _patch_fetch(monkeypatch, exc=AuthExpiredError("cookie 失效"))
+        _patch_fetch(monkeypatch, exc=AuthExpiredError("cookie expired"))
         result = build_response(ACCOUNT, FETCH_CFG, TEMPLATE, CLIENT)
         assert result["success"] is False
-        assert "凭证" in result["reason"]
+        assert "cookie" in result["reason"]
         assert result["data"] == ""
 
     def test_fetch_error(self, monkeypatch) -> None:
-        _patch_fetch(monkeypatch, exc=FetchError("超时"))
+        _patch_fetch(monkeypatch, exc=FetchError("timeout"))
         result = build_response(ACCOUNT, FETCH_CFG, TEMPLATE, CLIENT)
         assert result["success"] is False
-        assert "抓取失败" in result["reason"]
+        assert "fetch failed" in result["reason"]
         assert result["data"] == ""
 
 
@@ -107,11 +107,11 @@ class TestBuildResponseParseErrors:
         _patch_fetch(monkeypatch, html=NO_SUB_HTML)
         result = build_response(ACCOUNT, FETCH_CFG, TEMPLATE, CLIENT)
         assert result["success"] is False
-        assert "订阅" in result["reason"]
+        assert "subscription" in result["reason"]
 
     def test_unparseable_page(self, monkeypatch) -> None:
         _patch_fetch(monkeypatch, html="<html>completely different structure</html>")
         result = build_response(ACCOUNT, FETCH_CFG, TEMPLATE, CLIENT)
         assert result["success"] is False
-        assert "解析" in result["reason"]
+        assert "parse" in result["reason"]
         assert result["data"] == ""

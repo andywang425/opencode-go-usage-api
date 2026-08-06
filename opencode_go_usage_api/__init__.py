@@ -1,4 +1,4 @@
-"""OpenCode Go 多账号用量 API。"""
+"""OpenCode Go multi-account usage API."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ __all__ = ["app"] # type: ignore
 
 
 def __getattr__(name: str) -> Any:
-    """兼容 ``uvicorn opencode_go_usage_api:app``，并保持普通导入无副作用。"""
+    """Support ``uvicorn opencode_go_usage_api:app`` while keeping plain imports side-effect free."""
     if name != "app":
         raise AttributeError(name)
 

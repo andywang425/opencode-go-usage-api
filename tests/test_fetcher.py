@@ -11,11 +11,11 @@ from opencode_go_usage_api.fetcher import (
     fetch_html,
 )
 
-SETTINGS = FetchConfig(10, 1, "zh", "test-agent")
+SETTINGS = FetchConfig(10, 1, "en", "test-agent")
 
 
 def _make_client(account: AccountConfig, handler, settings=SETTINGS) -> httpx2.Client:
-    """构造走真实常驻 Client 路径的测试客户端，仅拦截网络层。"""
+    """Build a test client that uses the real persistent-Client path, only intercepting the network layer."""
     client = create_client(account, settings)
     client._transport = httpx2.MockTransport(handler)
     return client
@@ -26,7 +26,7 @@ def _parse_cookie_header(value: str) -> dict[str, str]:
 
 
 def test_each_account_client_sends_own_url_and_cookie() -> None:
-    """每个账号独立 Client，各自携带自己的凭据，互不可见。"""
+    """Each account has its own Client that carries its own credentials, invisible to the others."""
     requests: list[tuple[str, dict[str, str]]] = []
 
     def handler(request):
@@ -43,17 +43,17 @@ def test_each_account_client_sends_own_url_and_cookie() -> None:
     assert requests == [
         (
             "https://opencode.ai/workspace/wrk_main/go",
-            {"auth": "main-cookie", "oc_locale": "zh"},
+            {"auth": "main-cookie", "oc_locale": "en"},
         ),
         (
             "https://opencode.ai/workspace/wrk_backup/go",
-            {"auth": "backup-cookie", "oc_locale": "zh"},
+            {"auth": "backup-cookie", "oc_locale": "en"},
         ),
     ]
 
 
 def test_upstream_set_cookie_does_not_pollute_client_jar() -> None:
-    """常驻 Client 复用时，上游 Set-Cookie 不得改写配置里的凭据。"""
+    """When the persistent Client is reused, upstream Set-Cookie must not rewrite the configured credentials."""
 
     def handler(request):
         return httpx2.Response(
@@ -68,18 +68,18 @@ def test_upstream_set_cookie_does_not_pollute_client_jar() -> None:
     fetch_html(account, SETTINGS, client)
     fetch_html(account, SETTINGS, client)
 
-    assert dict(client.cookies) == {"auth": "cookie", "oc_locale": "zh"}
+    assert dict(client.cookies) == {"auth": "cookie", "oc_locale": "en"}
 
 
 def test_non_200_fails_immediately_without_retry() -> None:
-    """上游非 200（如 403/404/429）是明确失败，不应重试。"""
+    """A non-200 upstream response (e.g. 403/404/429) is a definitive failure and should not be retried."""
     attempts: list[str] = []
 
     def handler(request):
         attempts.append(str(request.url))
         return httpx2.Response(429, text="rate limited")
 
-    settings = FetchConfig(10, 3, "zh", "test-agent")
+    settings = FetchConfig(10, 3, "en", "test-agent")
     account = AccountConfig("main", "cookie", "wrk_main")
     client = _make_client(account, handler, settings)
 
@@ -89,7 +89,7 @@ def test_non_200_fails_immediately_without_retry() -> None:
 
 
 def test_network_error_retries_with_backoff_then_succeeds(monkeypatch) -> None:
-    """网络层异常（超时、连接失败）按 retries 重试，重试前有小幅退避。"""
+    """Network-layer errors (timeout, connect failure) retry per the retries setting, with a small backoff first."""
     sleeps: list[float] = []
     monkeypatch.setattr("opencode_go_usage_api.fetcher.time.sleep", sleeps.append)
     attempts: list[str] = []

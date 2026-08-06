@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-## 项目概述
+## Project overview
 
-被访问时实时抓取 OpenCode Go 工作区页面、解析用量并返回 JSON 的 HTTPS API（FastAPI）。支持多个命名账号，所有逻辑集中在 `opencode_go_usage_api/` 包内，CLI 入口为 `opencode_go_usage_api/cli.py`。
+An HTTPS API (FastAPI) that live-scrapes the OpenCode Go workspace page on each request, parses usage, and returns JSON. It supports multiple named accounts; all logic lives in the `opencode_go_usage_api/` package, and the CLI entrypoint is `opencode_go_usage_api/cli.py`.
 
-## 常用命令
+## Common commands
 
 ```bash
 uv sync
@@ -12,21 +12,21 @@ uv run uvicorn opencode_go_usage_api:app --reload
 uv run opencode-go-usage-api
 uv run pytest
 ./run.sh
-./gen-cert.sh <公网IP>
+./gen-cert.sh <PUBLIC_IP>
 curl -k https://127.0.0.1:<PORT>/health
 curl -k -H "Authorization: Bearer <TOKEN>" https://127.0.0.1:<PORT>/usage
 curl -k -H "Authorization: Bearer <TOKEN>" https://127.0.0.1:<PORT>/usage/<ACCOUNT_ID>
 ```
 
-## 配置
+## Configuration
 
-服务固定读取当前工作目录下的 `config.toml`，模板见 `config.example.toml`。配置包含 API Token、监听/TLS、全局抓取与响应设置，以及 `[accounts.<id>]` 多账号凭据。配置在启动时严格校验，修改后需重启。
+The service always reads `config.toml` from the current working directory; see `config.example.toml` for a template. The config holds the API token, listen/TLS settings, global fetch and response settings, and the `[accounts.<id>]` multi-account credentials. It is validated strictly at startup, and a restart is required after edits.
 
-## 部署
+## Deployment
 
-服务文件 `opencode-go-usage-api.service`，部署步骤见 `README.md`。
+The systemd unit is `opencode-go-usage-api.service`; deployment steps are in `README.md`.
 
-## 隐私保护
+## Privacy protection
 
-- 测试用例中不允许出现个人信息，账户标识、customerID、subscriptionID、邮箱等必须替换为虚构值。
-- `config.toml` 含真实凭据，不得提交，其具体内容不允许以任何形式出现在 Agent 的上下文中。
+- No personal information may appear in test cases; account identifiers, customerID, subscriptionID, emails, etc. must be replaced with fictitious values.
+- `config.toml` contains real credentials and must never be committed; its actual contents must not appear in the agent's context in any form.

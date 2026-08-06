@@ -1,13 +1,13 @@
-"""用量响应格式化。"""
+"""Usage response formatting."""
 
 from __future__ import annotations
 
 from .models import Usage
 
 DEFAULT_DATA_TEMPLATE = (
-    "滚动 {rolling_percent}% ({rolling_reset}) | "
-    "周 {weekly_percent}% ({weekly_reset}) | "
-    "月 {monthly_percent}% ({monthly_reset})"
+    "Rolling {rolling_percent}% ({rolling_reset}) | "
+    "Weekly {weekly_percent}% ({weekly_reset}) | "
+    "Monthly {monthly_percent}% ({monthly_reset})"
 )
 
 _SECTIONS = ("rolling", "weekly", "monthly")
@@ -16,7 +16,7 @@ _MISSING = "—"
 
 
 def fmt_reset(u: Usage) -> str:
-    """倒计时展示：优先格式化秒数，否则使用 DOM 兜底文本。"""
+    """Countdown display: prefer formatting the seconds, otherwise fall back to the DOM text."""
     sec = u.reset_in_sec
     if sec is None:
         return u.reset_text or "?"
@@ -33,7 +33,7 @@ def fmt_reset(u: Usage) -> str:
 
 
 class _SafeDict(dict):
-    """让未知占位符保留原样，便于发现模板拼写错误。"""
+    """Leave unknown placeholders intact so template typos are easy to spot."""
 
     def __missing__(self, key: str) -> str:
         return "{" + key + "}"
@@ -54,7 +54,7 @@ def _build_values(usages: dict[str, Usage]) -> _SafeDict:
 
 
 def validate_template(template: str) -> None:
-    """验证模板语法；未知的简单占位符仍被允许并保留。"""
+    """Validate template syntax; unknown simple placeholders are still allowed and preserved."""
     probe = _SafeDict({f"{s}_{f}": "0" for s in _SECTIONS for f in _FIELDS})
     try:
         template.format_map(probe)
@@ -65,7 +65,7 @@ def validate_template(template: str) -> None:
 def build_data(
     usages: dict[str, Usage], data_template: str = DEFAULT_DATA_TEMPLATE
 ) -> str:
-    """按指定模板渲染 data 字段。"""
+    """Render the data field using the given template."""
     values = _build_values(usages)
     try:
         return data_template.format_map(values)

@@ -1,4 +1,4 @@
-"""从工作目录下的 config.toml 加载并校验服务配置。"""
+"""Load and validate the service config from config.toml in the working directory."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ _MISSING = object()
 
 
 class ConfigError(ValueError):
-    """配置文件缺失、格式错误或字段校验失败。"""
+    """Config file missing, malformed, or failing field validation."""
 
 
 @dataclass(frozen=True)
@@ -74,7 +74,7 @@ class AppConfig:
 def _reject_unknown(table: Mapping[str, Any], allowed: set[str], context: str) -> None:
     unknown = sorted(set(table) - allowed)
     if unknown:
-        raise ConfigError(f"{context} 包含未知字段：{', '.join(unknown)}")
+        raise ConfigError(f"{context} contains unknown fields: {', '.join(unknown)}")
 
 
 def _get_table(
@@ -83,10 +83,10 @@ def _get_table(
     value = table.get(key, _MISSING)
     if value is _MISSING:
         if required:
-            raise ConfigError(f"缺少必填配置表 {context}.{key}")
+            raise ConfigError(f"missing required config table {context}.{key}")
         return {}
     if not isinstance(value, dict):
-        raise ConfigError(f"{context}.{key} 必须是配置表")
+        raise ConfigError(f"{context}.{key} must be a config table")
     return value
 
 
@@ -100,11 +100,11 @@ def _get_string(
 ) -> str:
     value = table.get(key, default)
     if value is _MISSING:
-        raise ConfigError(f"缺少必填配置 {context}.{key}")
+        raise ConfigError(f"missing required config {context}.{key}")
     if not isinstance(value, str):
-        raise ConfigError(f"{context}.{key} 必须是字符串")
+        raise ConfigError(f"{context}.{key} must be a string")
     if not allow_empty and not value:
-        raise ConfigError(f"{context}.{key} 不能为空")
+        raise ConfigError(f"{context}.{key} cannot be empty")
     return value
 
 
@@ -113,7 +113,7 @@ def _get_int(
 ) -> int:
     value = table.get(key, default)
     if isinstance(value, bool) or not isinstance(value, int):
-        raise ConfigError(f"{context}.{key} 必须是整数")
+        raise ConfigError(f"{context}.{key} must be an integer")
     return value
 
 
@@ -122,10 +122,10 @@ def _get_number(
 ) -> float:
     value = table.get(key, default)
     if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ConfigError(f"{context}.{key} 必须是数字")
+        raise ConfigError(f"{context}.{key} must be a number")
     result = float(value)
     if not math.isfinite(result):
-        raise ConfigError(f"{context}.{key} 必须是有限数字")
+        raise ConfigError(f"{context}.{key} must be a finite number")
     return result
 
 
@@ -135,22 +135,22 @@ def _optional_path(table: Mapping[str, Any], key: str, context: str) -> str | No
 
 
 def load_config(path: Path | None = None) -> AppConfig:
-    """读取并严格校验一个 TOML 配置文件。"""
+    """Read and strictly validate one TOML config file."""
     if path is None:
         path = Path.cwd() / CONFIG_FILENAME
     try:
         with path.open("rb") as file:
             raw = tomllib.load(file)
     except FileNotFoundError as exc:
-        raise ConfigError(f"配置文件不存在：{path}") from exc
+        raise ConfigError(f"config file not found: {path}") from exc
     except OSError as exc:
-        raise ConfigError(f"无法读取配置文件 {path}：{exc}") from exc
+        raise ConfigError(f"cannot read config file {path}: {exc}") from exc
     except tomllib.TOMLDecodeError as exc:
-        raise ConfigError(f"TOML 格式错误：{exc}") from exc
+        raise ConfigError(f"TOML syntax error: {exc}") from exc
 
-    _reject_unknown(raw, {"server", "fetch", "response", "account", "accounts"}, "根配置")
+    _reject_unknown(raw, {"server", "fetch", "response", "account", "accounts"}, "root config")
 
-    server_raw = _get_table(raw, "server", "根配置")
+    server_raw = _get_table(raw, "server", "root config")
     _reject_unknown(
         server_raw,
         {"host", "port", "api_token", "ssl_certfile", "ssl_keyfile"},
@@ -158,11 +158,11 @@ def load_config(path: Path | None = None) -> AppConfig:
     )
     port = _get_int(server_raw, "port", "server", default=18443)
     if not 1 <= port <= 65535:
-        raise ConfigError("server.port 必须在 1 到 65535 之间")
+        raise ConfigError("server.port must be between 1 and 65535")
     ssl_certfile = _optional_path(server_raw, "ssl_certfile", "server")
     ssl_keyfile = _optional_path(server_raw, "ssl_keyfile", "server")
     if bool(ssl_certfile) != bool(ssl_keyfile):
-        raise ConfigError("server.ssl_certfile 与 server.ssl_keyfile 必须同时配置或同时留空")
+        raise ConfigError("server.ssl_certfile and server.ssl_keyfile must be set together or both empty")
     server = ServerConfig(
         host=_get_string(server_raw, "host", "server", default="0.0.0.0"),
         port=port,
@@ -171,24 +171,24 @@ def load_config(path: Path | None = None) -> AppConfig:
         ssl_keyfile=ssl_keyfile,
     )
 
-    fetch_raw = _get_table(raw, "fetch", "根配置", required=False)
+    fetch_raw = _get_table(raw, "fetch", "root config", required=False)
     _reject_unknown(fetch_raw, {"timeout", "retries", "locale", "user_agent"}, "fetch")
     timeout = _get_number(fetch_raw, "timeout", "fetch", default=10.0)
     if timeout <= 0:
-        raise ConfigError("fetch.timeout 必须大于 0")
+        raise ConfigError("fetch.timeout must be greater than 0")
     retries = _get_int(fetch_raw, "retries", "fetch", default=1)
     if retries < 0:
-        raise ConfigError("fetch.retries 不能为负数")
+        raise ConfigError("fetch.retries cannot be negative")
     fetch = FetchConfig(
         timeout=timeout,
         retries=retries,
-        locale=_get_string(fetch_raw, "locale", "fetch", default="zh"),
+        locale=_get_string(fetch_raw, "locale", "fetch", default="en"),
         user_agent=_get_string(
             fetch_raw, "user_agent", "fetch", default=DEFAULT_USER_AGENT
         ),
     )
 
-    response_raw = _get_table(raw, "response", "根配置", required=False)
+    response_raw = _get_table(raw, "response", "root config", required=False)
     _reject_unknown(response_raw, {"data_template"}, "response")
     data_template = _get_string(
         response_raw,
@@ -201,25 +201,25 @@ def load_config(path: Path | None = None) -> AppConfig:
     try:
         validate_template(data_template)
     except ValueError as exc:
-        raise ConfigError(f"response.data_template 模板非法：{exc}") from exc
+        raise ConfigError(f"response.data_template template is invalid: {exc}") from exc
     response = ResponseConfig(data_template=data_template)
 
-    account_raw = _get_table(raw, "account", "根配置")
+    account_raw = _get_table(raw, "account", "root config")
     _reject_unknown(account_raw, {"default"}, "account")
     default_account = _get_string(account_raw, "default", "account")
 
-    accounts_raw = _get_table(raw, "accounts", "根配置")
+    accounts_raw = _get_table(raw, "accounts", "root config")
     if not accounts_raw:
-        raise ConfigError("accounts 至少需要配置一个账号")
+        raise ConfigError("accounts must define at least one account")
     accounts: dict[str, AccountConfig] = {}
     for account_id, value in accounts_raw.items():
         context = f"accounts.{account_id}"
         if not _ACCOUNT_ID_RE.fullmatch(account_id):
             raise ConfigError(
-                f"账号 ID {account_id!r} 非法：仅允许 1-64 位字母、数字、_、-，且首位须为字母或数字"
+                f"invalid account ID {account_id!r}: only 1-64 letters, digits, _, - allowed, and the first character must be a letter or digit"
             )
         if not isinstance(value, dict):
-            raise ConfigError(f"{context} 必须是配置表")
+            raise ConfigError(f"{context} must be a config table")
         _reject_unknown(value, {"auth_cookie", "workspace_id"}, context)
         accounts[account_id] = AccountConfig(
             account_id=account_id,
@@ -228,7 +228,7 @@ def load_config(path: Path | None = None) -> AppConfig:
         )
 
     if default_account not in accounts:
-        raise ConfigError(f"默认账号 {default_account!r} 不存在于 accounts")
+        raise ConfigError(f"default account {default_account!r} not present in accounts")
 
     return AppConfig(
         server=server,

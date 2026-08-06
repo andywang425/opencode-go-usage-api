@@ -1,4 +1,4 @@
-"""FastAPI 应用工厂。"""
+"""FastAPI application factory."""
 
 from __future__ import annotations
 
@@ -18,17 +18,17 @@ ResponseBuilder = Callable[[AccountConfig, FetchConfig, str, httpx2.Client], dic
 
 
 class UnauthorizedError(Exception):
-    """鉴权失败，由全局异常处理器统一返回 JSON。"""
+    """Auth failure, returned as JSON by the global exception handler."""
 
 
 def create_app(
     config: AppConfig, response_builder: ResponseBuilder = build_response
 ) -> FastAPI:
-    """使用已校验配置创建应用，便于启动和测试共用同一条路径。"""
+    """Build the app from an already-validated config, so startup and tests share one path."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        # 每个账号一个应用生命周期内常驻的 Client，复用连接池/TLS 会话
+        # One persistent Client per account for the app's lifetime, reusing connection pool / TLS session
         app.state.http_clients = {
             account_id: create_client(account, config.fetch)
             for account_id, account in config.accounts.items()
@@ -45,8 +45,9 @@ def create_app(
 
     def require_token(authorization: str = Header(default="")) -> None:
         expected = f"Bearer {config.server.api_token}"
-        # 请求头按 latin-1 解码可能含非 ASCII 字符，而 compare_digest 不支持
-        # 非 ASCII 字符串（抛 TypeError 变成 500），因此统一编码为 bytes 再比较。
+        # The header is decoded as latin-1 and may contain non-ASCII bytes, which
+        # compare_digest does not accept (raises TypeError -> 500). Encode both
+        # sides as bytes so the comparison is always safe.
         if not hmac.compare_digest(
             authorization.encode("utf-8"), expected.encode("utf-8")
         ):
@@ -71,20 +72,20 @@ def create_app(
         account = config.accounts.get(account_id)
         if account is None:
             return JSONResponse(
-                {"success": False, "reason": "账号不存在", "data": ""},
+                {"success": False, "reason": "account not found", "data": ""},
                 status_code=404,
             )
         return response_for(account)
 
     @app.get("/health")
     def health() -> dict:
-        """存活检查不鉴权、不抓取，也不检查上游账号状态。"""
+        """Liveness probe: no auth, no fetch, no upstream account check."""
         return {"status": "ok"}
 
     @app.exception_handler(UnauthorizedError)
     def handle_unauthorized(request: Request, exc: UnauthorizedError) -> JSONResponse:
         return JSONResponse(
-            {"success": False, "reason": "未授权", "data": ""},
+            {"success": False, "reason": "unauthorized", "data": ""},
             status_code=401,
         )
 
