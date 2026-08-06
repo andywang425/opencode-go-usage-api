@@ -1,4 +1,4 @@
-"""数据结构。"""
+"""Data structures."""
 
 from __future__ import annotations
 
@@ -7,10 +7,11 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Usage:
-    """单项用量：已用百分比 + 距下次重置的秒数 + 状态。
+    """A single usage entry: percent used + seconds until next reset + status.
 
-    内联 JSON 路径填 reset_in_sec（精确秒数）；DOM 兜底路径拿不到秒数，
-    填 reset_text（页面上「重置于 X 天 Y 小时」原文）由 fmt_reset 直接展示。
+    The inline JSON path fills reset_in_sec (exact seconds); the DOM fallback path
+    can't get the seconds, so it fills reset_text (the raw "resets in X days Y hours"
+    text from the page) which fmt_reset displays directly.
     """
 
     percent: int

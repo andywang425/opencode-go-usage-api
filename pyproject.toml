@@ -1,7 +1,7 @@
 [project]
 name = "opencode-go-usage-api"
 version = "0.1.0"
-description = "实时抓取 OpenCode Go 工作区页面并返回用量 JSON 的 HTTPS API"
+description = "HTTPS API that live-scrapes the OpenCode Go workspace page and returns usage as JSON"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"

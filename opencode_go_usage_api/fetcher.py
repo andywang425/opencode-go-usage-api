@@ -1,4 +1,4 @@
-"""抓取 OpenCode Go 工作区页面。"""
+"""Fetch the OpenCode Go workspace page."""
 
 from __future__ import annotations
 
@@ -10,30 +10,33 @@ from .config import AccountConfig, FetchConfig
 
 
 class FetchError(Exception):
-    """抓取阶段失败（网络、超时或上游非 200）。"""
+    """Fetch-phase failure (network, timeout, or non-200 upstream)."""
 
 
 class AuthExpiredError(FetchError):
-    """被重定向到登录页：auth cookie 失效，或 workspace_id 错误/无权访问。重试无意义。"""
+    """Redirected to the login page: auth cookie expired, or workspace_id wrong/unreachable. Retrying is pointless."""
 
 
 _LOGIN_PAGE_MARKER = "<title>OpenAuth</title>"
 
-# 网络异常重试前的固定退避，避免立即重试
+# Fixed backoff before retrying a network error, to avoid immediate retries
 RETRY_BACKOFF_SECONDS = 0.5
 
 
 class _FrozenCookies(httpx2.Cookies):
-    """忽略响应 Set-Cookie 的 cookie jar。
+    """Cookie jar that ignores response Set-Cookie headers.
 
-    常驻 Client 的 jar 会被上游响应改写；冻结后每次请求只携带配置里的
-    凭据，与旧的"每次抓取新建 Client"语义一致。
+    A persistent Client's jar gets rewritten by upstream responses; freezing it
+    means each request only carries the credentials from the config, matching the
+    old "create a new Client per fetch" semantics.
 
-    官方对禁用 cookie 持久化的跟踪 issue（本实现即其中的社区 workaround）：
+    Official tracking issue for disabling cookie persistence (this implementation
+    is the community workaround for it):
     https://github.com/pydantic/httpx2/issues/801
 
-    TODO: 若官方落地冻结 Cookie 的方案（如 httpx.NoCookies()），
-    用官方 API 替换本类及 create_client 中的 _cookies 私有属性赋值。
+    TODO: if an official frozen-cookie option lands (e.g. httpx.NoCookies()),
+    replace this class and the _cookies private-attribute assignment in
+    create_client with the official API.
     """
 
     def extract_cookies(self, response: httpx2.Response) -> None:
@@ -41,19 +44,21 @@ class _FrozenCookies(httpx2.Cookies):
 
 
 def create_client(account: AccountConfig, settings: FetchConfig) -> httpx2.Client:
-    """为一个账号创建应用生命周期内常驻的 Client，复用连接池/TLS 会话。
+    """Create an app-lifetime persistent Client for one account, reusing the connection pool/TLS session.
 
-    每个账号独立 Client，cookie 互不可见，避免共享 jar 串号；且 httpx2
-    跨重定向时会丢弃请求级 Cookie 头、只用 Client jar 重建，凭据必须放
-    Client 级才能在站内重定向后仍然有效。
+    Each account gets its own Client so cookies never bleed between accounts;
+    and since httpx2 drops request-level Cookie headers on redirects and rebuilds
+    them from the Client jar, credentials must live at the Client level to survive
+    in-site redirects.
     """
     client = httpx2.Client(
         timeout=settings.timeout,
         follow_redirects=True,
         headers={"User-Agent": settings.user_agent, "Accept": "text/html"},
     )
-    # Client 构造器和 cookies setter 都会把传入值重新包成普通 Cookies，
-    # 想用冻结 jar 只能在构造后直接替换。
+    # Both the Client constructor and the cookies setter re-wrap the value in a
+    # plain Cookies, so a frozen jar can only be installed by replacing the
+    # attribute after construction.
     client._cookies = _FrozenCookies(
         {"auth": account.auth_cookie, "oc_locale": settings.locale}
     )
@@ -61,7 +66,7 @@ def create_client(account: AccountConfig, settings: FetchConfig) -> httpx2.Clien
 
 
 def _is_login_page(resp: httpx2.Response) -> bool:
-    """判断响应是否落在登录或选择登录方式页面。"""
+    """Return whether the response landed on the login or login-method page."""
     final = resp.url
     if final.host == "auth.opencode.ai":
         return True
@@ -73,7 +78,7 @@ def _is_login_page(resp: httpx2.Response) -> bool:
 def fetch_html(
     account: AccountConfig, settings: FetchConfig, client: httpx2.Client
 ) -> str:
-    """通过该账号的常驻 Client 实时抓取一次工作区页面。"""
+    """Live-fetch the workspace page once through the account's persistent Client."""
     last_exc: Exception | None = None
     for attempt in range(settings.retries + 1):
         if attempt:
@@ -82,14 +87,14 @@ def fetch_html(
             resp = client.get(account.workspace_url)
             if _is_login_page(resp):
                 raise AuthExpiredError(
-                    "被重定向到登录页，登录凭证可能已失效，或 workspace_id 错误/无权访问"
+                    "redirected to the login page; the auth cookie may have expired, or workspace_id is wrong or unreachable"
                 )
             if resp.status_code != 200:
-                raise FetchError(f"上游返回 HTTP {resp.status_code}")
+                raise FetchError(f"upstream returned HTTP {resp.status_code}")
             return resp.text
         except FetchError:
-            # 凭证失效和上游非 200 都是明确失败，重试无意义，直接上报
+            # Expired credentials and non-200 responses are definitive failures; retrying is pointless
             raise
-        except Exception as exc:  # noqa: BLE001 网络层异常（超时、连接失败）统一重试
+        except Exception as exc:  # noqa: BLE001 network-layer errors (timeout, connect failure) all retry
             last_exc = exc
-    raise FetchError(f"无法连接 OpenCode（超时或上游异常）：{last_exc}")
+    raise FetchError(f"cannot connect to OpenCode (timeout or upstream error): {last_exc}")

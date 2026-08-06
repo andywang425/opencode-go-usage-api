@@ -22,7 +22,7 @@ def make_config() -> AppConfig:
     }
     return AppConfig(
         server=ServerConfig("127.0.0.1", 18443, "api-secret", None, None),
-        fetch=FetchConfig(10, 1, "zh", "test-agent"),
+        fetch=FetchConfig(10, 1, "en", "test-agent"),
         response=ResponseConfig("{rolling_percent}"),
         default_account="Main",
         accounts=MappingProxyType(accounts),
@@ -54,7 +54,7 @@ def test_default_and_named_routes_select_isolated_accounts() -> None:
 
 
 def test_lifespan_creates_per_account_clients_and_closes_them_on_shutdown() -> None:
-    """每个账号一个常驻 Client 挂在 app.state，路由拿到对应实例，关停时全部关闭。"""
+    """One persistent Client per account is mounted on app.state, routes get their instance, all close on shutdown."""
     seen_clients: list[httpx2.Client] = []
 
     def fake_builder(account, fetch_config, data_template, http_client):
@@ -78,7 +78,7 @@ def test_account_ids_are_case_sensitive() -> None:
         response = client.get("/usage/main", headers=AUTH_HEADER)
 
     assert response.status_code == 404
-    assert response.json() == {"success": False, "reason": "账号不存在", "data": ""}
+    assert response.json() == {"success": False, "reason": "account not found", "data": ""}
 
 
 def test_unknown_account_requires_auth_before_404() -> None:
@@ -86,24 +86,24 @@ def test_unknown_account_requires_auth_before_404() -> None:
         response = client.get("/usage/missing")
 
     assert response.status_code == 401
-    assert response.json() == {"success": False, "reason": "未授权", "data": ""}
+    assert response.json() == {"success": False, "reason": "unauthorized", "data": ""}
 
 
 def test_non_ascii_authorization_returns_401_not_500() -> None:
-    """请求头按 latin-1 解码可能含非 ASCII 字符，不应触发 TypeError 变成 500。"""
+    """A header decoded as latin-1 may contain non-ASCII bytes and must not trigger a TypeError turning into a 500."""
     with TestClient(create_app(make_config())) as client:
-        # 以 bytes 形式直接构造含非 ASCII 字节的头，绕过客户端层的 ASCII 编码检查
+        # Build a header with non-ASCII bytes directly as bytes, bypassing the client-side ASCII encoding check
         response = client.get(
             "/usage", headers={b"Authorization": "Bearer café".encode("latin-1")}
         )
 
     assert response.status_code == 401
-    assert response.json() == {"success": False, "reason": "未授权", "data": ""}
+    assert response.json() == {"success": False, "reason": "unauthorized", "data": ""}
 
 
 def test_business_failure_keeps_http_200() -> None:
     def failed_builder(account, fetch_config, data_template, http_client):
-        return {"success": False, "reason": "抓取失败：timeout", "data": ""}
+        return {"success": False, "reason": "fetch failed: timeout", "data": ""}
 
     with TestClient(create_app(make_config(), failed_builder)) as client:
         response = client.get("/usage/backup", headers=AUTH_HEADER)

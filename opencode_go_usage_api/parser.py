@@ -1,9 +1,10 @@
-"""解析：内联 JSON 主用，DOM 兜底。
+"""Parsing: inline JSON as the primary path, DOM as the fallback.
 
-内联数据形如：
+Inline data looks like:
   rollingUsage: $R[31] = { status: "ok", resetInSec: 18000, usagePercent: 0 }
-三个键名固定，值块非严格 JSON（含 !0、new Date() 等），因此对每个用量块
-单独用正则抽取三个数值字段，互不依赖字段出现顺序。
+The three keys have fixed names, but the value blocks are not strict JSON (they
+contain !0, new Date(), etc.), so each usage block is matched separately with a
+regex that extracts the three numeric fields regardless of field order.
 """
 
 from __future__ import annotations
@@ -18,21 +19,22 @@ _USAGE_KEYS = {
     "monthly": "monthlyUsage",
 }
 
-# 用量块的值紧跟在 `<key>:` 之后，形如 `<key>:$R[31]={...}` 或 `<key>:{...}`。
-# 真实页面里 `monthlyUsage` 会出现两次：真正的用量块 `<key>:$R[n]={...}`，
-# 以及订阅信息块里的 `<key>:null`（值是 null，非用量数据）。只匹配前者，
-# 跳过 `:null`，否则约一半请求会错抓到 null 后面无关的空 {} 块、丢掉 resetInSec。
-# `:` 与 `{` 之间允许出现 `$R[数字]=` 这种 hydration 赋值前缀，或仅空白。
+# A usage block's value follows `<key>:` directly, like `<key>:$R[31]={...}` or `<key>:{...}`.
+# On the real page `monthlyUsage` appears twice: the actual usage block `<key>:$R[n]={...}`,
+# and a `:null` entry inside the subscription-info block (value is null, not usage data).
+# Only match the former and skip `:null`; otherwise roughly half of requests would latch
+# onto an unrelated empty {} block after the null and lose resetInSec.
+# Between `:` and `{` there may be a `$R[<number>=` hydration prefix, or just whitespace.
 _USAGE_VALUE_RE = r"\s*:\s*(?:\$R\[\d+\]\s*=\s*)?\{"
 
 
 def _extract_usage_block(html: str, key: str) -> str | None:
-    """从内联脚本里截出某个用量键对应的 {...} 块文本。"""
-    # 定位 `<key>:` 之后紧跟 `{`（可带 $R[n]= 前缀）的位置，再做花括号配平找块结尾。
+    """Slice out the {...} block text for a given usage key from the inline script."""
+    # Locate `<key>:` followed by `{` (optionally after a $R[n]= prefix), then brace-balance to the end.
     m = re.search(re.escape(key) + _USAGE_VALUE_RE, html)
     if not m:
         return None
-    brace_start = m.end() - 1  # 落在开括号 {
+    brace_start = m.end() - 1  # lands on the opening brace {
     depth = 0
     for i in range(brace_start, len(html)):
         c = html[i]
@@ -56,7 +58,7 @@ def _parse_str_field(block: str, field: str) -> str | None:
 
 
 def parse_inline(html: str) -> dict[str, Usage]:
-    """从内联 JSON 区解析三组用量；缺失的项不放入结果。"""
+    """Parse the three usage groups from the inline JSON region; missing items are omitted."""
     result: dict[str, Usage] = {}
     for name, key in _USAGE_KEYS.items():
         block = _extract_usage_block(html, key)
@@ -73,12 +75,14 @@ def parse_inline(html: str) -> dict[str, Usage]:
     return result
 
 
-# 当内联区结构变化抽不到时，退回渲染后 DOM 抓百分比。
-# DOM 里没有精确 resetInSec，但 reset-time span 有「重置于 X 天 Y 小时」原文，
-# 直接抠出来原文返回（不反解析为秒、不依赖语言），仅百分比仍由 DOM 提供。
+# When the inline region's structure changes and nothing can be extracted, fall back to
+# grabbing percentages from the rendered DOM. The DOM has no precise resetInSec, but the
+# reset-time span carries the raw "resets in X days Y hours" text, which is returned
+# verbatim (not re-parsed into seconds, not language-dependent); only the percentage
+# still comes from the DOM.
 #
-# 页面固定包含 3 个 data-slot="usage-item" 块，顺序为 rolling → weekly → monthly，
-# 通过结构定位而非文本标签匹配，因此与 locale 无关。
+# The page always contains 3 data-slot="usage-item" blocks in rolling -> weekly -> monthly
+# order, located by structure rather than text labels, so it is locale-independent.
 
 _DOM_ORDER = ("rolling", "weekly", "monthly")
 
@@ -86,7 +90,7 @@ _USAGE_ITEM_RE = re.compile(r'data-slot="usage-item"')
 
 
 def _clean_reset_text(raw: str) -> str | None:
-    """把 reset-time span 内文去掉 SSR 注释、压空白，得到展示用文本。"""
+    """Strip SSR comments and collapse whitespace from the reset-time span for display."""
     cleaned = re.sub(r"<!--.*?-->", "", raw, flags=re.S)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return cleaned or None
@@ -98,14 +102,14 @@ def parse_dom(html: str) -> dict[str, Usage]:
     for idx, name in enumerate(_DOM_ORDER):
         if idx >= len(item_starts):
             break
-        # 截取当前 item 到下一个 item（或 +800 字符兜底）之间的片段
+        # Slice from the current item to the next one (or +800 chars as a fallback)
         seg_start = item_starts[idx]
         seg_end = item_starts[idx + 1] if idx + 1 < len(item_starts) else seg_start + 800
         segment = html[seg_start:seg_end]
-        # 优先从 usage-value slot 抽百分比
+        # Prefer the percentage from the usage-value slot
         m = re.search(r'data-slot="usage-value">\s*(?:<!--.*?-->)?\s*(\d+)', segment, re.S)
         if not m:
-            # 退一步：从 progress-bar 的 width:N% 抽
+            # Fall back to the progress-bar width:N%
             m = re.search(r"width:\s*(\d+)%", segment)
         if not m:
             continue
@@ -121,31 +125,32 @@ def parse_dom(html: str) -> dict[str, Usage]:
 
 
 def parse_usage(html: str) -> dict[str, Usage]:
-    """先内联后 DOM；对内联缺失的单项用 DOM 补齐。"""
+    """Inline first, DOM second; fill any item missing from inline with the DOM value."""
     inline = parse_inline(html)
     if len(inline) == 3:
         return inline
     dom = parse_dom(html)
-    # 合并：内联优先，缺的项用 DOM 补
+    # Merge: inline wins, missing items are backfilled from the DOM
     merged = dict(dom)
     merged.update(inline)
     return merged
 
 
 def is_no_subscription(html: str) -> bool:
-    """识别「无 Go 订阅」页面：用量块整体缺失时的稳定兜底判定。
+    """Detect the "no Go subscription" page, the stable fallback when usage blocks are absent.
 
-    无订阅页既没有内联用量对象，也没有
-    DOM 用量节点，parse_usage 会返回空。此时需与真正的 cookie 失效/结构变更
-    区分：无订阅页有明显的促销订阅区，且订阅状态字段为 null。
+    The no-subscription page has neither inline usage objects nor DOM usage nodes, so
+    parse_usage returns empty. At that point it must be distinguished from a genuinely
+    expired cookie or a changed page structure: the no-subscription page has a prominent
+    promo subscription section and its subscription status field is null.
 
-    主判据：DOM 存在「订阅 Go」按钮 data-slot="subscribe-button"（有订阅页
-    对应的是「管理订阅」按钮，无此 slot）。辅以内联 lite: null 印证，避免
-    某个无关促销横幅误触发。
+    Primary signal: a "Subscribe to Go" button with data-slot="subscribe-button" exists
+    (the subscribed page has a "Manage subscription" button without this slot). Backed up
+    by an inline `lite: null`, to avoid an unrelated promo banner misfiring.
     """
     if 'data-slot="subscribe-button"' not in html:
         return False
-    # lite: null 出现在 billing 块；有订阅页此处是 lite: {...} 或带 liteSubscriptionID
+    # lite: null appears in the billing block; the subscribed page has lite: {...} or a liteSubscriptionID
     return bool(re.search(r"lite\s*:\s*null", html)) and bool(
         re.search(r"liteSubscriptionID\s*:\s*null", html)
     )

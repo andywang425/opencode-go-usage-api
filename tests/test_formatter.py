@@ -1,4 +1,4 @@
-"""formatter 模块单元测试。"""
+"""Unit tests for the formatter module."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ class TestFmtReset:
         assert fmt_reset(_usage(0, reset_in_sec=-100)) == "0m"
 
     def test_none_uses_reset_text(self) -> None:
-        assert fmt_reset(_usage(0, reset_text="重置于 2 天 7 小时")) == "重置于 2 天 7 小时"
+        assert fmt_reset(_usage(0, reset_text="resets in 2 days 7 hours")) == "resets in 2 days 7 hours"
 
     def test_none_no_text_returns_question(self) -> None:
         assert fmt_reset(_usage(0)) == "?"
@@ -77,7 +77,7 @@ class TestBuildData:
         usages = {"rolling": _usage(5, reset_in_sec=100)}
         result = build_data(usages)
         assert "5%" in result
-        assert "—" in result  # weekly/monthly 缺失显示 —
+        assert "—" in result  # weekly/monthly missing shows —
 
     def test_unknown_placeholder_preserved(self) -> None:
         usages = {"rolling": _usage(1, reset_in_sec=60)}
@@ -91,9 +91,9 @@ class TestBuildData:
             "weekly": _usage(20, reset_in_sec=120),
             "monthly": _usage(30, reset_in_sec=180),
         }
-        # 带属性访问的模板会触发 AttributeError
+        # A template with attribute access triggers AttributeError
         result = build_data(usages, "{rolling_percent.attr}")
-        # 回退到默认模板，仍能渲染
+        # Falls back to the default template, still renders
         assert "10%" in result
 
 
